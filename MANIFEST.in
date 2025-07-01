@@ -1,0 +1,40 @@
+include README.md
+include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
+include pyproject.toml
+include example_usage.py
+
+# Include package data
+recursive-include src/pyoutlook_db *.py
+recursive-include src/pyoutlook_db *.pyi
+
+# Documentation
+recursive-include docs *.md *.rst *.txt
+recursive-exclude docs/_build *
+
+# Tests
+recursive-include tests *.py
+
+# Config files
+include .gitignore
+include .pre-commit-config.yaml
+
+# Exclude compiled Python files
+global-exclude *.pyc
+global-exclude *.pyo
+global-exclude *.pyd
+global-exclude __pycache__
+global-exclude .pytest_cache
+global-exclude .mypy_cache
+
+# Exclude development files
+exclude tox.ini
+exclude .coverage
+exclude .coveragerc
+exclude htmlcov
+
+# Exclude temporary files
+global-exclude .DS_Store
+global-exclude *.tmp
+global-exclude *.log
