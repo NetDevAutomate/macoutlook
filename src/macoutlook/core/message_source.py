@@ -330,7 +330,18 @@ class MessageSourceReader:
     # --- Index persistence ---
 
     def _load_cached_index(self) -> dict[str, str] | None:
-        """Load index from disk cache if it's still valid."""
+        """Load index from disk cache if it's still valid.
+
+        Cache is considered valid if:
+        - Cache file exists and is parseable
+        - It was built for the same sources directory
+        - Its internal count is consistent
+
+        We deliberately do NOT check directory mtime because Outlook
+        updates it on every mail sync, which would invalidate the cache
+        constantly. Use build_index(force=True) to rebuild explicitly,
+        or the cache will be supplemented with new files on next build.
+        """
         if not _INDEX_CACHE_FILE.exists():
             return None
 
@@ -339,7 +350,6 @@ class MessageSourceReader:
                 data = json.load(f)
 
             meta = data.get("_meta", {})
-            cached_mtime = meta.get("mtime", 0)
             cached_count = meta.get("count", 0)
             cached_sources_dir = meta.get("sources_dir", "")
 
@@ -348,21 +358,11 @@ class MessageSourceReader:
                 logger.debug("Cache sources_dir mismatch, rebuilding")
                 return None
 
-            # Check if sources directory has been modified
-            if self._sources_dir.exists():
-                current_mtime = self._sources_dir.stat().st_mtime
-                if current_mtime != cached_mtime:
-                    logger.debug(
-                        "Sources dir mtime changed (%.0f -> %.0f), rebuilding",
-                        cached_mtime, current_mtime,
-                    )
-                    return None
-
             # Remove meta key and return index
             index = {k: v for k, v in data.items() if k != "_meta"}
 
             if len(index) != cached_count:
-                logger.debug("Cache count mismatch, rebuilding")
+                logger.debug("Cache count mismatch (%d vs %d), rebuilding", len(index), cached_count)
                 return None
 
             return index
@@ -376,11 +376,8 @@ class MessageSourceReader:
         try:
             _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-            mtime = self._sources_dir.stat().st_mtime if self._sources_dir.exists() else 0
-
             data = dict(index)
             data["_meta"] = {  # type: ignore[assignment]
-                "mtime": mtime,
                 "count": len(index),
                 "sources_dir": str(self._sources_dir),
             }

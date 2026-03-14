@@ -257,7 +257,12 @@ class TestIndexPersistence:
         assert count == 1
         assert reader2.get_source_path("cached@example.com") is not None
 
-    def test_cache_invalidated_on_dir_change(self, tmp_path: Path, monkeypatch):
+    def test_cache_survives_dir_mtime_change(self, tmp_path: Path, monkeypatch):
+        """Cache should NOT be invalidated by directory mtime changes.
+
+        Outlook updates the Message Sources dir mtime on every sync,
+        which would make the cache useless if we checked mtime.
+        """
         cache_file = tmp_path / "cache" / "message_index.json"
         monkeypatch.setattr(
             "macoutlook.core.message_source._INDEX_CACHE_FILE", cache_file
@@ -273,14 +278,68 @@ class TestIndexPersistence:
         # Build and cache
         reader1 = MessageSourceReader(sources_dir=sources)
         reader1.build_index(force=True)
+        assert cache_file.exists()
 
-        # Modify the directory (changes mtime)
-        import time
-        time.sleep(0.1)
-        _write_mime_file(sources / "new.olk15MsgSource", "new@example.com")
-        os.utime(sources, None)  # Ensure mtime changes
+        # Modify directory mtime (simulating Outlook sync)
+        os.utime(sources, None)
 
-        # Rebuild should detect change
+        # Cache should still be valid — loads instantly, same count
         reader2 = MessageSourceReader(sources_dir=sources)
         count = reader2.build_index()
-        assert count == 2
+        assert count == 1  # Loaded from cache, not rebuilt
+
+    def test_force_rebuild_ignores_cache(self, tmp_path: Path, monkeypatch):
+        cache_file = tmp_path / "cache" / "message_index.json"
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._INDEX_CACHE_FILE", cache_file
+        )
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._CACHE_DIR", tmp_path / "cache"
+        )
+
+        sources = tmp_path / "sources"
+        sources.mkdir()
+        _write_mime_file(sources / "old.olk15MsgSource", "old@example.com")
+
+        # Build and cache
+        reader1 = MessageSourceReader(sources_dir=sources)
+        reader1.build_index(force=True)
+
+        # Add a new file
+        _write_mime_file(sources / "new.olk15MsgSource", "new@example.com")
+
+        # Normal build uses cache (still shows 1)
+        reader2 = MessageSourceReader(sources_dir=sources)
+        assert reader2.build_index() == 1
+
+        # Force rebuild picks up the new file
+        assert reader2.build_index(force=True) == 2
+        assert reader2.get_source_path("new@example.com") is not None
+
+    def test_cache_invalidated_on_different_sources_dir(self, tmp_path: Path, monkeypatch):
+        cache_file = tmp_path / "cache" / "message_index.json"
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._INDEX_CACHE_FILE", cache_file
+        )
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._CACHE_DIR", tmp_path / "cache"
+        )
+
+        sources_a = tmp_path / "sources_a"
+        sources_a.mkdir()
+        _write_mime_file(sources_a / "a.olk15MsgSource", "a@example.com")
+
+        sources_b = tmp_path / "sources_b"
+        sources_b.mkdir()
+        _write_mime_file(sources_b / "b.olk15MsgSource", "b@example.com")
+
+        # Build cache for sources_a
+        reader_a = MessageSourceReader(sources_dir=sources_a)
+        reader_a.build_index(force=True)
+
+        # Different sources_dir should not use that cache
+        reader_b = MessageSourceReader(sources_dir=sources_b)
+        count = reader_b.build_index()
+        assert count == 1
+        assert reader_b.get_source_path("b@example.com") is not None
+        assert reader_b.get_source_path("a@example.com") is None
