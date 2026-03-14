@@ -25,7 +25,9 @@ class TestEmailMessage:
         assert email.body_text is None
 
     def test_full_construction(self):
-        att = AttachmentInfo(filename="doc.pdf", size=1024, content_type="application/pdf")
+        att = AttachmentInfo(
+            filename="doc.pdf", size=1024, content_type="application/pdf"
+        )
         email = EmailMessage(
             message_id="<full@example.com>",
             record_id=42,
@@ -99,10 +101,12 @@ class TestEmailMessage:
             timestamp=datetime(2025, 1, 1),
             preview="short preview",
         )
-        enriched = email.model_copy(update={
-            "body_text": "Full body text here",
-            "content_source": ContentSource.MESSAGE_SOURCE,
-        })
+        enriched = email.model_copy(
+            update={
+                "body_text": "Full body text here",
+                "content_source": ContentSource.MESSAGE_SOURCE,
+            }
+        )
         assert enriched.body_text == "Full body text here"
         assert enriched.content_source == ContentSource.MESSAGE_SOURCE
         assert enriched.preview == "short preview"  # preserved
@@ -121,7 +125,9 @@ class TestAttachmentInfo:
         assert att.size == 2048
 
     def test_optional_size(self):
-        att = AttachmentInfo(filename="unknown.bin", content_type="application/octet-stream")
+        att = AttachmentInfo(
+            filename="unknown.bin", content_type="application/octet-stream"
+        )
         assert att.size is None
 
     def test_frozen(self):

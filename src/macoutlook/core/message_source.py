@@ -25,9 +25,7 @@ from ..models.email_message import AttachmentInfo
 logger = logging.getLogger(__name__)
 
 # Default location for .olk15MsgSource files
-_DEFAULT_SOURCES_SUBPATH = (
-    "Outlook 15 Profiles/Main Profile/Data/Message Sources"
-)
+_DEFAULT_SOURCES_SUBPATH = "Outlook 15 Profiles/Main Profile/Data/Message Sources"
 
 # Cache location for persisted index
 _CACHE_DIR = Path.home() / ".cache" / "macoutlook"
@@ -63,7 +61,9 @@ class MessageSourceReader:
     _MSG_ID_RE = re.compile(rb"Message-ID:\s*<?([^>\r\n]+)>?", re.IGNORECASE)
 
     def __init__(self, sources_dir: Path | str | None = None) -> None:
-        self._sources_dir = Path(sources_dir) if sources_dir else self._default_sources_dir()
+        self._sources_dir = (
+            Path(sources_dir) if sources_dir else self._default_sources_dir()
+        )
         self._index: dict[str, str] | None = None
         self._full_parser = BytesParser(policy=policy.default)
 
@@ -167,7 +167,9 @@ class MessageSourceReader:
             progress_callback: Optional (current, total) callback for progress.
         """
         if not self._sources_dir.exists():
-            logger.warning("Message sources directory does not exist: %s", self._sources_dir)
+            logger.warning(
+                "Message sources directory does not exist: %s", self._sources_dir
+            )
             return {}
 
         entries = self._walk_source_files(self._sources_dir)
@@ -200,7 +202,9 @@ class MessageSourceReader:
 
         logger.info(
             "Indexed %d Message-IDs from %d files (%d without Message-ID)",
-            len(index), file_count, error_count,
+            len(index),
+            file_count,
+            error_count,
         )
         return index
 
@@ -230,7 +234,13 @@ class MessageSourceReader:
         These files have a binary preamble (typically 36-40 bytes) before
         the MIME content. We look for common RFC 2822 header patterns.
         """
-        for pattern in (b"Date:", b"From:", b"Received:", b"MIME-Version:", b"Subject:"):
+        for pattern in (
+            b"Date:",
+            b"From:",
+            b"Received:",
+            b"MIME-Version:",
+            b"Subject:",
+        ):
             idx = data.find(pattern)
             if idx != -1:
                 return idx
@@ -316,12 +326,14 @@ class MessageSourceReader:
                 except Exception:
                     size = None
 
-                attachments.append(AttachmentInfo(
-                    filename=safe_filename,
-                    size=size,
-                    content_type=content_type,
-                    content_id=content_id,
-                ))
+                attachments.append(
+                    AttachmentInfo(
+                        filename=safe_filename,
+                        size=size,
+                        content_type=content_type,
+                        content_id=content_id,
+                    )
+                )
         except Exception as e:
             logger.debug("Failed to extract attachments: %s", e)
 
@@ -362,7 +374,11 @@ class MessageSourceReader:
             index = {k: v for k, v in data.items() if k != "_meta"}
 
             if len(index) != cached_count:
-                logger.debug("Cache count mismatch (%d vs %d), rebuilding", len(index), cached_count)
+                logger.debug(
+                    "Cache count mismatch (%d vs %d), rebuilding",
+                    len(index),
+                    cached_count,
+                )
                 return None
 
             return index
@@ -385,7 +401,9 @@ class MessageSourceReader:
             with open(_INDEX_CACHE_FILE, "w") as f:
                 json.dump(data, f)
 
-            logger.info("Saved index cache (%d entries) to %s", len(index), _INDEX_CACHE_FILE)
+            logger.info(
+                "Saved index cache (%d entries) to %s", len(index), _INDEX_CACHE_FILE
+            )
 
         except OSError as e:
             logger.warning("Failed to save index cache: %s", e)

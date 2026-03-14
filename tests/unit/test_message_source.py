@@ -1,13 +1,11 @@
 """Unit tests for MessageSourceReader."""
 
-import json
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from macoutlook.core.message_source import MessageSourceReader, MimeContent
+from macoutlook.core.message_source import MessageSourceReader
 
 
 def _write_mime_file(path: Path, message_id: str, body: str = "Hello world") -> None:
@@ -34,7 +32,7 @@ def _write_multipart_file(
         f"To: recipient@example.com\r\n"
         f"Subject: Multipart Test\r\n"
         f"Message-ID: <{message_id}>\r\n"
-        f"Content-Type: multipart/alternative; boundary=\"{boundary}\"\r\n"
+        f'Content-Type: multipart/alternative; boundary="{boundary}"\r\n'
         f"\r\n"
         f"--{boundary}\r\n"
         f"Content-Type: text/plain; charset=utf-8\r\n"
@@ -57,15 +55,15 @@ def _write_attachment_file(path: Path, message_id: str) -> None:
         f"To: recipient@example.com\r\n"
         f"Subject: Attachment Test\r\n"
         f"Message-ID: <{message_id}>\r\n"
-        f"Content-Type: multipart/mixed; boundary=\"{boundary}\"\r\n"
+        f'Content-Type: multipart/mixed; boundary="{boundary}"\r\n'
         f"\r\n"
         f"--{boundary}\r\n"
         f"Content-Type: text/plain; charset=utf-8\r\n"
         f"\r\n"
         f"Email with attachment\r\n"
         f"--{boundary}\r\n"
-        f"Content-Type: application/pdf; name=\"report.pdf\"\r\n"
-        f"Content-Disposition: attachment; filename=\"report.pdf\"\r\n"
+        f'Content-Type: application/pdf; name="report.pdf"\r\n'
+        f'Content-Disposition: attachment; filename="report.pdf"\r\n'
         f"Content-Transfer-Encoding: base64\r\n"
         f"\r\n"
         f"JVBERi0xLjQKMSAwIG9iago=\r\n"
@@ -184,7 +182,8 @@ class TestMimeParsing:
     def test_parse_multipart_email(self, tmp_path: Path):
         msg_file = tmp_path / "multi.olk15MsgSource"
         _write_multipart_file(
-            msg_file, "multi@example.com",
+            msg_file,
+            "multi@example.com",
             text_body="Plain version",
             html_body="<p>HTML version</p>",
         )
@@ -316,7 +315,9 @@ class TestIndexPersistence:
         assert reader2.build_index(force=True) == 2
         assert reader2.get_source_path("new@example.com") is not None
 
-    def test_cache_invalidated_on_different_sources_dir(self, tmp_path: Path, monkeypatch):
+    def test_cache_invalidated_on_different_sources_dir(
+        self, tmp_path: Path, monkeypatch
+    ):
         cache_file = tmp_path / "cache" / "message_index.json"
         monkeypatch.setattr(
             "macoutlook.core.message_source._INDEX_CACHE_FILE", cache_file

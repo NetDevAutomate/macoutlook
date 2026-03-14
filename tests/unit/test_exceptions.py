@@ -47,7 +47,7 @@ class TestExceptions:
         assert err.content_type == "HTML"
 
     def test_message_source_error(self):
-        err = MessageSourceError("MIME parse failed", IOError("disk error"))
+        err = MessageSourceError("MIME parse failed", OSError("disk error"))
         assert "MIME parse failed" in str(err)
         assert err.original_error is not None
 

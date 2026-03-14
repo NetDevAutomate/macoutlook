@@ -33,23 +33,31 @@ individually or use as a copy-paste reference.
 from email import policy
 from email.parser import BytesParser
 
+
 def parse_olk15_file(file_path: str):
     """Parse an .olk15MsgSource file into an EmailMessage object."""
-    with open(file_path, 'rb') as fp:
+    with open(file_path, "rb") as fp:
         msg = BytesParser(policy=policy.default).parse(fp)
     return msg
 
+
 # Equivalent convenience function form:
 import email
+
+
 def parse_olk15_bytes(raw_bytes: bytes):
     """Parse raw bytes into an EmailMessage."""
     return email.message_from_bytes(raw_bytes, policy=policy.default)
 
+
 # IF you truly have a string (already decoded text), use Parser/message_from_string:
 from email.parser import Parser
+
+
 def parse_from_string(text: str):
     """Only use if data is genuinely a Python str, not bytes read from disk."""
     return Parser(policy=policy.default).parsestr(text)
+
 
 # NOTE: If .olk15MsgSource files are UTF-8 text files (not raw MIME bytes),
 # then reading as text and using Parser is acceptable. But MIME files from
@@ -105,6 +113,7 @@ def parse_from_string(text: str):
 
 # --- APPROACH A: High-level API (recommended for most use cases) ---
 
+
 def extract_content_modern(msg):
     """
     Extract text body, HTML body, and attachments using the modern API.
@@ -113,8 +122,8 @@ def extract_content_modern(msg):
     # Get the "best" body part -- tries related, then html, then plain
     # For just text: get_body(preferencelist=('plain',))
     # For just HTML: get_body(preferencelist=('html',))
-    body_plain = msg.get_body(preferencelist=('plain',))
-    body_html = msg.get_body(preferencelist=('html',))
+    body_plain = msg.get_body(preferencelist=("plain",))
+    body_html = msg.get_body(preferencelist=("html",))
 
     text_content = None
     html_content = None
@@ -132,17 +141,20 @@ def extract_content_modern(msg):
     # iter_attachments() only works on multipart messages
     if msg.is_multipart():
         for part in msg.iter_attachments():
-            attachments.append({
-                'filename': part.get_filename(),
-                'content_type': part.get_content_type(),
-                'size': len(part.get_content()),  # decoded content
-                'data': part.get_content(),  # bytes for non-text, str for text
-            })
+            attachments.append(
+                {
+                    "filename": part.get_filename(),
+                    "content_type": part.get_content_type(),
+                    "size": len(part.get_content()),  # decoded content
+                    "data": part.get_content(),  # bytes for non-text, str for text
+                }
+            )
 
     return text_content, html_content, attachments
 
 
 # --- APPROACH B: walk() for full tree traversal ---
+
 
 def extract_content_walk(msg):
     """
@@ -158,49 +170,54 @@ def extract_content_walk(msg):
         content_disposition = part.get_content_disposition()
 
         # Skip multipart containers -- they're just wrappers
-        if part.get_content_maintype() == 'multipart':
+        if part.get_content_maintype() == "multipart":
             continue
 
         # Check if it's an attachment
-        if content_disposition == 'attachment':
+        if content_disposition == "attachment":
             # get_payload(decode=True) returns bytes, handling base64/QP decoding
             data = part.get_payload(decode=True)
-            attachments.append({
-                'filename': part.get_filename(),
-                'content_type': content_type,
-                'size': len(data) if data else 0,
-                'data': data,
-            })
+            attachments.append(
+                {
+                    "filename": part.get_filename(),
+                    "content_type": content_type,
+                    "size": len(data) if data else 0,
+                    "data": data,
+                }
+            )
             continue
 
         # Inline or no disposition -- treat as body content
-        if content_type == 'text/plain':
+        if content_type == "text/plain":
             payload = part.get_payload(decode=True)
-            charset = part.get_content_charset() or 'utf-8'
-            text_parts.append(payload.decode(charset, errors='replace'))
+            charset = part.get_content_charset() or "utf-8"
+            text_parts.append(payload.decode(charset, errors="replace"))
 
-        elif content_type == 'text/html':
+        elif content_type == "text/html":
             payload = part.get_payload(decode=True)
-            charset = part.get_content_charset() or 'utf-8'
-            html_parts.append(payload.decode(charset, errors='replace'))
+            charset = part.get_content_charset() or "utf-8"
+            html_parts.append(payload.decode(charset, errors="replace"))
 
         else:
             # Other inline content (images, etc.) -- treat as attachment
             data = part.get_payload(decode=True)
             if data:
-                attachments.append({
-                    'filename': part.get_filename(),
-                    'content_type': content_type,
-                    'size': len(data),
-                    'data': data,
-                })
+                attachments.append(
+                    {
+                        "filename": part.get_filename(),
+                        "content_type": content_type,
+                        "size": len(data),
+                        "data": data,
+                    }
+                )
 
-    return '\n'.join(text_parts), '\n'.join(html_parts), attachments
+    return "\n".join(text_parts), "\n".join(html_parts), attachments
 
 
 # --- APPROACH C: iter_parts() for one-level traversal ---
 # Useful when you need to handle multipart/alternative vs multipart/mixed
 # differently (e.g., pick the best alternative rather than collecting all)
+
 
 def extract_content_structured(msg):
     """Handle multipart/alternative and multipart/mixed correctly."""
@@ -208,37 +225,40 @@ def extract_content_structured(msg):
         # Simple message, single part
         ct = msg.get_content_type()
         content = msg.get_content()  # auto-decoded (requires policy.default)
-        return content if ct == 'text/plain' else None, \
-               content if ct == 'text/html' else None, []
+        return (
+            content if ct == "text/plain" else None,
+            content if ct == "text/html" else None,
+            [],
+        )
 
     maintype = msg.get_content_type()
 
-    if maintype == 'multipart/alternative':
+    if maintype == "multipart/alternative":
         # Pick the best alternative (last one is usually richest)
         # Or use get_body() which handles this automatically
         text = html = None
         for part in msg.iter_parts():
-            if part.get_content_type() == 'text/plain':
+            if part.get_content_type() == "text/plain":
                 text = part.get_content()
-            elif part.get_content_type() == 'text/html':
+            elif part.get_content_type() == "text/html":
                 html = part.get_content()
         return text, html, []
 
-    elif maintype == 'multipart/mixed':
+    elif maintype == "multipart/mixed":
         # First part(s) are body, rest are attachments
         text = html = None
         attachments = []
         for part in msg.iter_parts():
-            if part.get_content_type() == 'multipart/alternative':
+            if part.get_content_type() == "multipart/alternative":
                 # Recurse into alternative
                 t, h, _ = extract_content_structured(part)
                 text = text or t
                 html = html or h
             elif part.is_attachment():
                 attachments.append(part)
-            elif part.get_content_type() == 'text/plain' and text is None:
+            elif part.get_content_type() == "text/plain" and text is None:
                 text = part.get_content()
-            elif part.get_content_type() == 'text/html' and html is None:
+            elif part.get_content_type() == "text/html" and html is None:
                 html = part.get_content()
             else:
                 attachments.append(part)
@@ -281,6 +301,7 @@ def extract_content_structured(msg):
 #   - 'binary'           -> returned as-is
 #   - Missing header     -> returned as-is
 
+
 def decode_part_safely(part) -> str:
     """Robustly decode a text MIME part to a Python string."""
     # Modern API (requires policy.default):
@@ -292,25 +313,25 @@ def decode_part_safely(part) -> str:
     # Fallback: legacy API
     payload = part.get_payload(decode=True)
     if payload is None:
-        return ''
+        return ""
 
     # Try declared charset first
     charset = part.get_content_charset()
     if charset:
         try:
-            return payload.decode(charset, errors='replace')
+            return payload.decode(charset, errors="replace")
         except (LookupError, UnicodeDecodeError):
             pass
 
     # Fallback charset chain
-    for enc in ('utf-8', 'latin-1', 'ascii'):
+    for enc in ("utf-8", "latin-1", "ascii"):
         try:
-            return payload.decode(enc, errors='replace')
+            return payload.decode(enc, errors="replace")
         except (LookupError, UnicodeDecodeError):
             continue
 
     # Nuclear option: latin-1 never fails (all byte values are valid)
-    return payload.decode('latin-1', errors='replace')
+    return payload.decode("latin-1", errors="replace")
 
 
 # =============================================================================
@@ -342,26 +363,27 @@ def decode_part_safely(part) -> str:
 import os
 import re
 
+
 def sanitize_filename(filename: str | None) -> str:
     """Sanitize a filename from an email attachment."""
     if not filename:
-        return 'unnamed_attachment'
+        return "unnamed_attachment"
 
     # Remove path separators to prevent directory traversal
     filename = os.path.basename(filename)
 
     # Remove null bytes and other control characters
-    filename = re.sub(r'[\x00-\x1f\x7f]', '', filename)
+    filename = re.sub(r"[\x00-\x1f\x7f]", "", filename)
 
     # Replace potentially dangerous characters
-    filename = re.sub(r'[<>:"/\\|?*]', '_', filename)
+    filename = re.sub(r'[<>:"/\\|?*]', "_", filename)
 
     # Limit length
     if len(filename) > 255:
         name, ext = os.path.splitext(filename)
-        filename = name[:255 - len(ext)] + ext
+        filename = name[: 255 - len(ext)] + ext
 
-    return filename or 'unnamed_attachment'
+    return filename or "unnamed_attachment"
 
 
 def extract_attachments(msg):
@@ -375,12 +397,12 @@ def extract_attachments(msg):
         content = part.get_content()  # bytes for non-text, str for text
 
         attachment = {
-            'filename': sanitize_filename(part.get_filename()),
-            'content_type': part.get_content_type(),
-            'disposition': part.get_content_disposition(),
-            'charset': part.get_content_charset(),
-            'size': len(content) if content else 0,
-            'data': content,
+            "filename": sanitize_filename(part.get_filename()),
+            "content_type": part.get_content_type(),
+            "disposition": part.get_content_disposition(),
+            "charset": part.get_content_charset(),
+            "size": len(content) if content else 0,
+            "data": content,
         }
         attachments.append(attachment)
 
@@ -393,13 +415,13 @@ def extract_attachments_walk(msg):
     attachments = []
 
     for part in msg.walk():
-        if part.get_content_maintype() == 'multipart':
+        if part.get_content_maintype() == "multipart":
             continue
 
         disposition = part.get_content_disposition()
-        if disposition != 'attachment':
+        if disposition != "attachment":
             # Also catch inline non-text content as de facto attachments
-            if disposition == 'inline' and part.get_content_maintype() != 'text':
+            if disposition == "inline" and part.get_content_maintype() != "text":
                 pass  # treat as attachment
             else:
                 continue
@@ -408,12 +430,14 @@ def extract_attachments_walk(msg):
         if data is None:
             continue
 
-        attachments.append({
-            'filename': sanitize_filename(part.get_filename()),
-            'content_type': part.get_content_type(),
-            'size': len(data),
-            'data': data,
-        })
+        attachments.append(
+            {
+                "filename": sanitize_filename(part.get_filename()),
+                "content_type": part.get_content_type(),
+                "size": len(data),
+                "data": data,
+            }
+        )
 
     return attachments
 
@@ -460,15 +484,16 @@ def extract_attachments_walk(msg):
 
 from email import errors as email_errors
 
+
 def parse_email_robust(file_path: str):
     """Parse an email file with comprehensive error handling."""
     try:
-        with open(file_path, 'rb') as fp:
+        with open(file_path, "rb") as fp:
             msg = BytesParser(policy=policy.default).parse(fp)
     except email_errors.MessageParseError as e:
         # Extremely rare -- parser is very lenient
         raise ValueError(f"Failed to parse email: {e}") from e
-    except (OSError, IOError) as e:
+    except OSError as e:
         raise FileNotFoundError(f"Cannot read file: {e}") from e
 
     # Check for defects (malformed email that was parsed leniently)
@@ -481,8 +506,10 @@ def parse_email_robust(file_path: str):
     for part in msg.walk():
         if part.defects:
             for defect in part.defects:
-                print(f"WARNING: Part defect ({part.get_content_type()}): "
-                      f"{type(defect).__name__}: {defect}")
+                print(
+                    f"WARNING: Part defect ({part.get_content_type()}): "
+                    f"{type(defect).__name__}: {defect}"
+                )
 
     return msg
 
@@ -492,7 +519,7 @@ def parse_email_strict(file_path: str):
     """Parse with strict policy -- raises on any defect."""
     strict_policy = policy.default + policy.strict  # raise_on_defect=True
     try:
-        with open(file_path, 'rb') as fp:
+        with open(file_path, "rb") as fp:
             msg = BytesParser(policy=strict_policy).parse(fp)
         return msg
     except email_errors.MessageDefect as e:
@@ -500,6 +527,7 @@ def parse_email_strict(file_path: str):
 
 
 # === Common exception patterns you'll encounter ===
+
 
 def safe_get_content(part) -> str | bytes | None:
     """Safely extract content from a MIME part."""
@@ -517,7 +545,7 @@ def safe_get_content(part) -> str | bytes | None:
         # Charset declared but content doesn't match
         payload = part.get_payload(decode=True)
         if payload:
-            return payload.decode('utf-8', errors='replace')
+            return payload.decode("utf-8", errors="replace")
         return None
 
 
@@ -532,12 +560,13 @@ from pathlib import Path
 @dataclass
 class ParsedEmail:
     """Structured representation of a parsed email."""
-    subject: str = ''
-    from_addr: str = ''
+
+    subject: str = ""
+    from_addr: str = ""
     to_addrs: list[str] = field(default_factory=list)
     cc_addrs: list[str] = field(default_factory=list)
-    date: str = ''
-    message_id: str = ''
+    date: str = ""
+    message_id: str = ""
     text_body: str | None = None
     html_body: str | None = None
     attachments: list[dict] = field(default_factory=list)
@@ -555,7 +584,7 @@ def parse_olk15_message(file_path: str | Path) -> ParsedEmail:
 
     # Parse the raw MIME bytes
     try:
-        with open(file_path, 'rb') as fp:
+        with open(file_path, "rb") as fp:
             msg = BytesParser(policy=policy.default).parse(fp)
     except email_errors.MessageParseError as e:
         result.defects.append(f"Parse error: {e}")
@@ -569,20 +598,20 @@ def parse_olk15_message(file_path: str | Path) -> ParsedEmail:
         result.defects.append(f"{type(defect).__name__}: {defect}")
 
     # Extract headers (modern policy returns proper unicode automatically)
-    result.subject = str(msg.get('Subject', ''))
-    result.from_addr = str(msg.get('From', ''))
-    result.message_id = str(msg.get('Message-ID', ''))
-    result.date = str(msg.get('Date', ''))
+    result.subject = str(msg.get("Subject", ""))
+    result.from_addr = str(msg.get("From", ""))
+    result.message_id = str(msg.get("Message-ID", ""))
+    result.date = str(msg.get("Date", ""))
 
     # To and CC can have multiple addresses
-    to_header = msg.get('To', '')
+    to_header = msg.get("To", "")
     if to_header:
         # With policy.default, this is a parsed header object
-        result.to_addrs = [str(addr).strip() for addr in str(to_header).split(',')]
+        result.to_addrs = [str(addr).strip() for addr in str(to_header).split(",")]
 
-    cc_header = msg.get('Cc', '')
+    cc_header = msg.get("Cc", "")
     if cc_header:
-        result.cc_addrs = [str(addr).strip() for addr in str(cc_header).split(',')]
+        result.cc_addrs = [str(addr).strip() for addr in str(cc_header).split(",")]
 
     # Extract body content using the high-level API
     if not msg.is_multipart():
@@ -590,19 +619,19 @@ def parse_olk15_message(file_path: str | Path) -> ParsedEmail:
         ct = msg.get_content_type()
         content = safe_get_content(msg)
         if content is not None:
-            if ct == 'text/html':
+            if ct == "text/html":
                 result.html_body = str(content)
             else:
                 result.text_body = str(content)
     else:
         # Multipart -- use get_body() for the main content
-        plain_part = msg.get_body(preferencelist=('plain',))
+        plain_part = msg.get_body(preferencelist=("plain",))
         if plain_part:
             content = safe_get_content(plain_part)
             if content is not None:
                 result.text_body = str(content)
 
-        html_part = msg.get_body(preferencelist=('html',))
+        html_part = msg.get_body(preferencelist=("html",))
         if html_part:
             content = safe_get_content(html_part)
             if content is not None:
@@ -613,11 +642,13 @@ def parse_olk15_message(file_path: str | Path) -> ParsedEmail:
             for part in msg.iter_attachments():
                 data = safe_get_content(part)
                 if data is not None:
-                    result.attachments.append({
-                        'filename': sanitize_filename(part.get_filename()),
-                        'content_type': part.get_content_type(),
-                        'size': len(data) if data else 0,
-                    })
+                    result.attachments.append(
+                        {
+                            "filename": sanitize_filename(part.get_filename()),
+                            "content_type": part.get_content_type(),
+                            "size": len(data) if data else 0,
+                        }
+                    )
         except TypeError:
             # iter_attachments() can raise TypeError on malformed multipart
             result.defects.append("Failed to iterate attachments")

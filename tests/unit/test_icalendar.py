@@ -3,10 +3,7 @@
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
 from macoutlook.parsers.icalendar import ICalendarParser
-
 
 # Minimal valid .ics file content
 _SIMPLE_ICS = """\

@@ -131,7 +131,7 @@ All code must pass these checks:
 # Formatting
 uv run ruff format .
 
-# Linting 
+# Linting
 uv run ruff check .
 
 # Type checking
@@ -162,10 +162,10 @@ def test_should_return_emails_when_valid_date_range_provided():
     client = OutlookClient()
     start_date = datetime(2024, 1, 1)
     end_date = datetime(2024, 1, 31)
-    
+
     # Act
     emails = client.get_emails_by_date_range(start_date, end_date)
-    
+
     # Assert
     assert isinstance(emails, list)
     assert len(emails) >= 0

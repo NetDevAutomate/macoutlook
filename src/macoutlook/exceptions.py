@@ -40,9 +40,7 @@ class DatabaseLockError(OutlookDBError):
 class DatabaseConnectionError(OutlookDBError):
     """Raised when database connection fails."""
 
-    def __init__(
-        self, db_path: str, original_error: Exception | None = None
-    ) -> None:
+    def __init__(self, db_path: str, original_error: Exception | None = None) -> None:
         message = f"Failed to connect to database at {db_path}"
         details = str(original_error) if original_error else None
         super().__init__(message, details)
@@ -66,9 +64,7 @@ class ParseError(OutlookDBError):
 class MessageSourceError(OutlookDBError):
     """Raised when .olk15MsgSource file operations fail."""
 
-    def __init__(
-        self, message: str, original_error: Exception | None = None
-    ) -> None:
+    def __init__(self, message: str, original_error: Exception | None = None) -> None:
         details = str(original_error) if original_error else None
         super().__init__(message, details)
         self.original_error = original_error

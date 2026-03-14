@@ -1,13 +1,12 @@
 """Unit tests for EmailEnricher."""
 
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
 from macoutlook.core.enricher import EmailEnricher, EnrichmentResult
 from macoutlook.core.message_source import MessageSourceReader, MimeContent
-from macoutlook.models.email_message import AttachmentInfo, EmailMessage
+from macoutlook.models.email_message import AttachmentInfo
 from macoutlook.models.enums import ContentSource
 
 
@@ -66,9 +65,7 @@ class TestEmailEnricher:
             content_type="application/pdf",
         )
         reader = Mock(spec=MessageSourceReader)
-        reader.get_content.return_value = _make_mime_content(
-            attachments=(attachment,)
-        )
+        reader.get_content.return_value = _make_mime_content(attachments=(attachment,))
 
         enricher = EmailEnricher(source_reader=reader)
         result = enricher.enrich("attach@example.com")

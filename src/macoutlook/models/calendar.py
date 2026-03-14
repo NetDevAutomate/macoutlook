@@ -90,7 +90,9 @@ class CalendarEvent(BaseModel):
     created_time: datetime | None = None
     modified_time: datetime | None = None
 
-    @field_serializer("start_time", "end_time", "created_time", "modified_time", "recurrence_end_date")
+    @field_serializer(
+        "start_time", "end_time", "created_time", "modified_time", "recurrence_end_date"
+    )
     @classmethod
     def serialize_datetime(cls, v: datetime | None) -> str | None:
         if v is None:
@@ -98,7 +100,11 @@ class CalendarEvent(BaseModel):
         return v.isoformat()
 
     @field_validator(
-        "start_time", "end_time", "created_time", "modified_time", "recurrence_end_date",
+        "start_time",
+        "end_time",
+        "created_time",
+        "modified_time",
+        "recurrence_end_date",
         mode="before",
     )
     @classmethod

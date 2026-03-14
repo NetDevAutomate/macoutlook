@@ -3,8 +3,6 @@
 from datetime import datetime
 from unittest.mock import Mock
 
-import pytest
-
 from macoutlook.core.client import OutlookClient, _parse_delimited
 from macoutlook.core.database import OutlookDatabase
 from macoutlook.core.enricher import EmailEnricher, EnrichmentResult
@@ -121,7 +119,9 @@ class TestOutlookClientEnrichment:
             body_text="Full body text",
             body_html="<p>Full body</p>",
             body_markdown="Full body",
-            attachments=(AttachmentInfo(filename="doc.pdf", content_type="application/pdf"),),
+            attachments=(
+                AttachmentInfo(filename="doc.pdf", content_type="application/pdf"),
+            ),
             source=ContentSource.MESSAGE_SOURCE,
         )
 
@@ -175,25 +175,27 @@ class TestOutlookClientEnrichment:
         mock_db = Mock(spec=OutlookDatabase)
         mock_db.is_connected = True
         mock_db.conn = Mock()
-        mock_db.execute_query.return_value = [{
-            "Record_RecordID": 1,
-            "Message_MessageID": "<t@x.com>",
-            "Message_NormalizedSubject": "Test",
-            "Message_SenderAddressList": "s@x.com",
-            "Message_SenderList": "Sender",
-            "Message_ToRecipientAddressList": None,
-            "Message_CCRecipientAddressList": None,
-            "Message_TimeReceived": datetime.now().timestamp(),
-            "Message_TimeSent": None,
-            "Message_Preview": "preview",
-            "Message_ReadFlag": 0,
-            "Message_IsOutgoingMessage": 0,
-            "Record_FlagStatus": 0,
-            "Record_Priority": 3,
-            "Record_FolderID": 1,
-            "Message_HasAttachment": 0,
-            "Message_Size": 100,
-        }]
+        mock_db.execute_query.return_value = [
+            {
+                "Record_RecordID": 1,
+                "Message_MessageID": "<t@x.com>",
+                "Message_NormalizedSubject": "Test",
+                "Message_SenderAddressList": "s@x.com",
+                "Message_SenderList": "Sender",
+                "Message_ToRecipientAddressList": None,
+                "Message_CCRecipientAddressList": None,
+                "Message_TimeReceived": datetime.now().timestamp(),
+                "Message_TimeSent": None,
+                "Message_Preview": "preview",
+                "Message_ReadFlag": 0,
+                "Message_IsOutgoingMessage": 0,
+                "Record_FlagStatus": 0,
+                "Record_Priority": 3,
+                "Record_FolderID": 1,
+                "Message_HasAttachment": 0,
+                "Message_Size": 100,
+            }
+        ]
 
         mock_enricher = Mock(spec=EmailEnricher)
         mock_enricher.build_index.return_value = 10
@@ -215,25 +217,27 @@ class TestOutlookClientSearch:
         mock_db = Mock(spec=OutlookDatabase)
         mock_db.is_connected = True
         mock_db.conn = Mock()
-        mock_db.execute_query.return_value = [{
-            "Record_RecordID": 1,
-            "Message_MessageID": "<s@x.com>",
-            "Message_NormalizedSubject": "Search Result",
-            "Message_SenderAddressList": "sender@example.com",
-            "Message_SenderList": "Andy Taylor",
-            "Message_ToRecipientAddressList": None,
-            "Message_CCRecipientAddressList": None,
-            "Message_TimeReceived": datetime.now().timestamp(),
-            "Message_TimeSent": None,
-            "Message_Preview": "preview",
-            "Message_ReadFlag": 1,
-            "Message_IsOutgoingMessage": 0,
-            "Record_FlagStatus": 0,
-            "Record_Priority": 3,
-            "Record_FolderID": 1,
-            "Message_HasAttachment": 0,
-            "Message_Size": 200,
-        }]
+        mock_db.execute_query.return_value = [
+            {
+                "Record_RecordID": 1,
+                "Message_MessageID": "<s@x.com>",
+                "Message_NormalizedSubject": "Search Result",
+                "Message_SenderAddressList": "sender@example.com",
+                "Message_SenderList": "Andy Taylor",
+                "Message_ToRecipientAddressList": None,
+                "Message_CCRecipientAddressList": None,
+                "Message_TimeReceived": datetime.now().timestamp(),
+                "Message_TimeSent": None,
+                "Message_Preview": "preview",
+                "Message_ReadFlag": 1,
+                "Message_IsOutgoingMessage": 0,
+                "Record_FlagStatus": 0,
+                "Record_Priority": 3,
+                "Record_FolderID": 1,
+                "Message_HasAttachment": 0,
+                "Message_Size": 200,
+            }
+        ]
         client = OutlookClient(database=mock_db)
         client._connected = True
         return client
@@ -285,7 +289,10 @@ class TestOutlookClientCalendar:
         mock_db.conn = Mock()
         mock_db.db_path = "/fake/path"
         mock_db.get_table_names.return_value = ["Mail", "CalendarEvents"]
-        mock_db.get_row_count.side_effect = lambda t: {"Mail": 100, "CalendarEvents": 50}[t]
+        mock_db.get_row_count.side_effect = lambda t: {
+            "Mail": 100,
+            "CalendarEvents": 50,
+        }[t]
 
         client = OutlookClient(database=mock_db)
         client._connected = True
