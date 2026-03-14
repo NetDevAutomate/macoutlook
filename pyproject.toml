@@ -8,37 +8,35 @@ dynamic = ["version"]
 description = "Python library for extracting email and calendar data from macOS Outlook"
 readme = "README.md"
 requires-python = ">=3.12"
-license = {text = "MIT"}
-authors = [
-    {name = "Andy Taylor"}
-]
+license = { text = "MIT" }
+authors = [{ name = "Andy Taylor" }]
 keywords = ["outlook", "sqlite", "email", "calendar", "macos", "mime"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: MacOS",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Communications :: Email",
-    "Topic :: Database",
-    "Topic :: Software Development :: Libraries :: Python Modules",
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Communications :: Email",
+  "Topic :: Database",
+  "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 
 dependencies = [
-    "beautifulsoup4>=4.12.0",
-    "markdownify>=0.11.0",
-    "click>=8.1.0",
-    "pydantic>=2.0.0",
-    "python-dateutil>=2.8.0",
-    "icalendar>=5.0.0",
+  "beautifulsoup4>=4.12.0",
+  "markdownify>=0.11.0",
+  "click>=8.1.0",
+  "pydantic>=2.0.0",
+  "python-dateutil>=2.8.0",
+  "icalendar>=5.0.0",
 ]
 
 [project.optional-dependencies]
 
 [project.urls]
-Repository = "https://github.com/taylaand/macoutlook"
-Issues = "https://github.com/taylaand/macoutlook/issues"
+Repository = "https://github.com/NetDevAutomate/macoutlook"
+Issues = "https://github.com/NetDevAutomate/macoutlook/issues"
 
 [project.scripts]
 macoutlook = "macoutlook.cli.main:cli"
@@ -57,20 +55,20 @@ exclude = ["docs/"]
 
 [tool.ruff.lint]
 select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # Pyflakes
-    "I",    # isort
-    "B",    # flake8-bugbear
-    "C4",   # flake8-comprehensions
-    "UP",   # pyupgrade
-    "SIM",  # flake8-simplify
-    "S",    # bandit security
-    "N",    # pep8-naming
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # Pyflakes
+  "I",   # isort
+  "B",   # flake8-bugbear
+  "C4",  # flake8-comprehensions
+  "UP",  # pyupgrade
+  "SIM", # flake8-simplify
+  "S",   # bandit security
+  "N",   # pep8-naming
 ]
 
 ignore = [
-    "E501",  # Line too long (let ruff format handle it)
+  "E501", # Line too long (let ruff format handle it)
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -107,24 +105,20 @@ pythonpath = ["src"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = [
-    "--strict-markers",
-    "--strict-config",
-    "--tb=short",
-]
+addopts = ["--strict-markers", "--strict-config", "--tb=short"]
 
 markers = [
-    "slow: marks tests as slow",
-    "integration: marks tests as integration tests",
-    "unit: marks tests as unit tests",
-    "macos: marks tests that require macOS",
+  "slow: marks tests as slow",
+  "integration: marks tests as integration tests",
+  "unit: marks tests as unit tests",
+  "macos: marks tests that require macOS",
 ]
 
 [dependency-groups]
 dev = [
-    "pytest>=7.4.0",
-    "pytest-cov>=4.1.0",
-    "ruff>=0.1.0",
-    "mypy>=1.5.0",
-    "pre-commit>=3.4.0",
+  "pytest>=7.4.0",
+  "pytest-cov>=4.1.0",
+  "ruff>=0.1.0",
+  "mypy>=1.5.0",
+  "pre-commit>=3.4.0",
 ]
