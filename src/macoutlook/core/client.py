@@ -110,7 +110,7 @@ class OutlookClient:
         """
         self.connect()
 
-        query_parts = [f"SELECT {_EMAIL_QUERY_COLUMNS} FROM Mail WHERE 1=1"]  # noqa: S608
+        query_parts = [f"SELECT {_EMAIL_QUERY_COLUMNS} FROM Mail WHERE 1=1"]  # noqa: S608  # nosec B608
         params: list[object] = []
 
         if start_date:
@@ -166,7 +166,7 @@ class OutlookClient:
         """
         self.connect()
 
-        query_parts = [f"SELECT {_EMAIL_QUERY_COLUMNS} FROM Mail WHERE 1=1"]  # noqa: S608
+        query_parts = [f"SELECT {_EMAIL_QUERY_COLUMNS} FROM Mail WHERE 1=1"]  # noqa: S608  # nosec B608
         params: list[object] = []
 
         if query:
@@ -226,7 +226,8 @@ class OutlookClient:
 
             matcher = FuzzyMatcher()
             emails = [
-                e for e in emails
+                e
+                for e in emails
                 if matcher.is_match(sender, e.sender_name or "")
                 or matcher.is_match(sender, e.sender)
             ]
@@ -287,7 +288,8 @@ class OutlookClient:
 
         self.connect()
 
-        query_parts = ["""
+        query_parts = [
+            """
             SELECT
                 Record_RecordID as event_id,
                 Record_FolderID as calendar_id,
@@ -298,7 +300,8 @@ class OutlookClient:
                 Record_ModDate as modified_time
             FROM CalendarEvents
             WHERE 1=1
-        """]
+        """
+        ]
         params: list[object] = []
 
         if calendar_id:
@@ -361,9 +364,7 @@ class OutlookClient:
 
         return info
 
-    def enrich_email(
-        self, email: EmailMessage, markdown: bool = True
-    ) -> EmailMessage:
+    def enrich_email(self, email: EmailMessage, markdown: bool = True) -> EmailMessage:
         """Enrich an email with full content from its .olk15MsgSource file.
 
         Returns a new EmailMessage instance with body_text, body_html,
@@ -384,13 +385,15 @@ class OutlookClient:
             return email
 
         # Create new frozen instance with enriched content
-        return email.model_copy(update={
-            "body_text": result.body_text,
-            "body_html": result.body_html,
-            "body_markdown": result.body_markdown,
-            "attachments": result.attachments,
-            "content_source": result.source,
-        })
+        return email.model_copy(
+            update={
+                "body_text": result.body_text,
+                "body_html": result.body_html,
+                "body_markdown": result.body_markdown,
+                "attachments": result.attachments,
+                "content_source": result.source,
+            }
+        )
 
     def enrich_emails(
         self,
@@ -440,7 +443,7 @@ class OutlookClient:
 
     def _row_to_email(self, row: object) -> EmailMessage:
         """Convert a database row to an EmailMessage."""
-        r = dict(row)  # type: ignore[arg-type]
+        r = dict(row)  # type: ignore[call-overload]
 
         # Parse recipients from semicolon-separated strings
         recipients = _parse_delimited(r.get("Message_ToRecipientAddressList"))
@@ -451,7 +454,11 @@ class OutlookClient:
 
         # Parse timestamp
         raw_ts = r.get("Message_TimeReceived") or 0
-        timestamp = datetime.fromtimestamp(float(raw_ts)) if raw_ts else datetime.fromtimestamp(0)
+        timestamp = (
+            datetime.fromtimestamp(float(raw_ts))
+            if raw_ts
+            else datetime.fromtimestamp(0)
+        )
 
         raw_sent = r.get("Message_TimeSent")
         time_sent = datetime.fromtimestamp(float(raw_sent)) if raw_sent else None
@@ -485,7 +492,9 @@ class OutlookClient:
         self.connect()
         return self
 
-    def __exit__(self, exc_type: type | None, exc_val: Exception | None, exc_tb: object) -> None:
+    def __exit__(
+        self, exc_type: type | None, exc_val: Exception | None, exc_tb: object
+    ) -> None:
         self.disconnect()
 
 

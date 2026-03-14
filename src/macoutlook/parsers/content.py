@@ -93,7 +93,7 @@ class ContentParser:
                 try:
                     for element in soup.select(selector):
                         element.unwrap()
-                except Exception:  # noqa: S112
+                except Exception:  # noqa: S112  # nosec B112
                     continue
 
             for tag in soup.find_all(["p", "div"]):
@@ -129,9 +129,24 @@ class ContentParser:
                 heading_style="ATX",
                 bullets="-",
                 convert=[
-                    "b", "strong", "i", "em", "u", "a", "p", "br",
-                    "h1", "h2", "h3", "h4", "h5", "h6",
-                    "ul", "ol", "li", "blockquote",
+                    "b",
+                    "strong",
+                    "i",
+                    "em",
+                    "u",
+                    "a",
+                    "p",
+                    "br",
+                    "h1",
+                    "h2",
+                    "h3",
+                    "h4",
+                    "h5",
+                    "h6",
+                    "ul",
+                    "ol",
+                    "li",
+                    "blockquote",
                 ],
             )
             markdown = self._clean_markdown(markdown)

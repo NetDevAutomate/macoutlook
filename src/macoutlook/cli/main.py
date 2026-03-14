@@ -3,7 +3,9 @@
 import json
 import logging
 import sys
+from collections.abc import Sequence
 from datetime import datetime, timedelta
+from typing import Any
 
 import click
 
@@ -13,13 +15,13 @@ from ..exceptions import OutlookDBError
 logger = logging.getLogger(__name__)
 
 
-def format_output(data: list[object], output_format: str) -> str:
+def format_output(data: Sequence[Any], output_format: str) -> str:
     """Format data for output in specified format."""
     if output_format == "json":
         items = []
         for item in data:
             if hasattr(item, "model_dump"):
-                items.append(item.model_dump())  # type: ignore[union-attr]
+                items.append(item.model_dump())
             elif isinstance(item, dict):
                 items.append(item)
             else:
@@ -27,13 +29,13 @@ def format_output(data: list[object], output_format: str) -> str:
         return json.dumps(items, indent=2, default=str)
 
     elif output_format == "table":
-        if isinstance(data, list) and data and hasattr(data[0], "model_dump"):
-                result = []
-                for i, item in enumerate(data):
-                    result.append(f"--- Item {i + 1} ---")
-                    for key, value in item.model_dump().items():  # type: ignore[union-attr]
-                        result.append(f"{key}: {value}")
-                return "\n".join(result)
+        if data and hasattr(data[0], "model_dump"):
+            result = []
+            for i, item in enumerate(data):
+                result.append(f"--- Item {i + 1} ---")
+                for key, value in item.model_dump().items():
+                    result.append(f"{key}: {value}")
+            return "\n".join(result)
         return str(data)
 
     return str(data)
@@ -58,8 +60,10 @@ def cli(ctx: click.Context, db_path: str | None, verbose: bool) -> None:
 @click.option("--end-date", type=click.DateTime(), help="End date (YYYY-MM-DD)")
 @click.option("--limit", default=100, help="Maximum number of emails")
 @click.option(
-    "--format", "output_format",
-    type=click.Choice(["json", "table"]), default="table",
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "table"]),
+    default="table",
     help="Output format",
 )
 @click.pass_context
@@ -97,8 +101,10 @@ def emails(
 
 @cli.command()
 @click.option(
-    "--format", "output_format",
-    type=click.Choice(["json", "table"]), default="table",
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "table"]),
+    default="table",
 )
 @click.pass_context
 def calendars(ctx: click.Context, output_format: str) -> None:
@@ -124,8 +130,10 @@ def calendars(ctx: click.Context, output_format: str) -> None:
 @click.option("--end-date", type=click.DateTime(), help="End date (YYYY-MM-DD)")
 @click.option("--limit", default=100, help="Maximum number of events")
 @click.option(
-    "--format", "output_format",
-    type=click.Choice(["json", "table"]), default="table",
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "table"]),
+    default="table",
 )
 @click.pass_context
 def events(
@@ -170,8 +178,10 @@ def events(
 @click.option("--end-date", type=click.DateTime(), help="End date")
 @click.option("--limit", default=50, help="Maximum results")
 @click.option(
-    "--format", "output_format",
-    type=click.Choice(["json", "table"]), default="table",
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "table"]),
+    default="table",
 )
 @click.pass_context
 def search(

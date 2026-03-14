@@ -3,6 +3,7 @@
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from icalendar import Calendar
 
@@ -21,7 +22,9 @@ class ICalendarParser:
             outlook_profile_path: Optional path to Outlook profile directory
         """
         self.outlook_profile_path = outlook_profile_path
-        logger.info("Initialized ICalendarParser (profile_path=%s)", outlook_profile_path)
+        logger.info(
+            "Initialized ICalendarParser (profile_path=%s)", outlook_profile_path
+        )
 
     def find_ics_files(self) -> list[str]:
         """Find all .ics files in the Outlook profile directory.
@@ -45,7 +48,9 @@ class ICalendarParser:
 
         # Search for .ics files in the Omc calendar directories
         omc_path = base_path / "Omc"
-        ics_files = [str(p) for p in omc_path.rglob("*.ics")] if omc_path.exists() else []
+        ics_files = (
+            [str(p) for p in omc_path.rglob("*.ics")] if omc_path.exists() else []
+        )
 
         logger.info("Found %d .ics files in %s", len(ics_files), omc_path)
         return ics_files
@@ -62,7 +67,7 @@ class ICalendarParser:
         events = []
 
         try:
-            with open(file_path, 'rb') as f:
+            with open(file_path, "rb") as f:
                 calendar = Calendar.from_ical(f.read())
 
             for component in calendar.walk():
@@ -81,7 +86,7 @@ class ICalendarParser:
         logger.debug("Parsed %s: %d events", file_path, len(events))
         return events
 
-    def _parse_vevent(self, vevent, file_path: str) -> CalendarEvent | None:
+    def _parse_vevent(self, vevent: Any, file_path: str) -> CalendarEvent | None:
         """Parse a VEVENT component into a CalendarEvent.
 
         Args:
@@ -93,14 +98,14 @@ class ICalendarParser:
         """
         try:
             # Extract basic event information
-            uid = str(vevent.get('UID', ''))
-            summary = str(vevent.get('SUMMARY', ''))
-            description = str(vevent.get('DESCRIPTION', ''))
-            location = str(vevent.get('LOCATION', ''))
+            uid = str(vevent.get("UID", ""))
+            summary = str(vevent.get("SUMMARY", ""))
+            description = str(vevent.get("DESCRIPTION", ""))
+            location = str(vevent.get("LOCATION", ""))
 
             # Extract dates
-            dtstart = vevent.get('DTSTART')
-            dtend = vevent.get('DTEND')
+            dtstart = vevent.get("DTSTART")
+            dtend = vevent.get("DTEND")
 
             if not dtstart or not dtend:
                 logger.warning("Event missing start or end time: %s", uid)
@@ -115,31 +120,31 @@ class ICalendarParser:
                 return None
 
             # Extract additional properties
-            is_all_day = hasattr(dtstart.dt, 'date') and not hasattr(dtstart.dt, 'hour')
-            is_recurring = bool(vevent.get('RRULE'))
+            is_all_day = hasattr(dtstart.dt, "date") and not hasattr(dtstart.dt, "hour")
+            is_recurring = bool(vevent.get("RRULE"))
 
             # Extract organizer
-            organizer = vevent.get('ORGANIZER')
-            organizer_email = ''
-            organizer_name = ''
+            organizer = vevent.get("ORGANIZER")
+            organizer_email = ""
+            organizer_name = ""
             if organizer:
-                organizer_email = str(organizer).replace('mailto:', '')
-                organizer_name = str(organizer.params.get('CN', ''))
+                organizer_email = str(organizer).replace("mailto:", "")
+                organizer_name = str(organizer.params.get("CN", ""))
 
             # Extract attendees
             attendees = []
-            raw_attendees = vevent.get('ATTENDEE', [])
+            raw_attendees = vevent.get("ATTENDEE", [])
             # Single attendee returns a vCalAddress (str subclass), not a list
             if isinstance(raw_attendees, str):
                 raw_attendees = [raw_attendees]
             elif not isinstance(raw_attendees, list):
                 raw_attendees = list(raw_attendees) if raw_attendees else []
             for attendee in raw_attendees:
-                attendees.append(str(attendee).replace('mailto:', ''))
+                attendees.append(str(attendee).replace("mailto:", ""))
 
             # Extract categories
             categories = []
-            cats = vevent.get('CATEGORIES')
+            cats = vevent.get("CATEGORIES")
             if cats:
                 if isinstance(cats, list):
                     categories = [str(c) for c in cats]
@@ -150,11 +155,11 @@ class ICalendarParser:
             created_time = None
             modified_time = None
 
-            created = vevent.get('CREATED')
+            created = vevent.get("CREATED")
             if created:
                 created_time = self._convert_to_datetime(created.dt)
 
-            dtstamp = vevent.get('DTSTAMP')
+            dtstamp = vevent.get("DTSTAMP")
             if dtstamp:
                 modified_time = self._convert_to_datetime(dtstamp.dt)
 
@@ -185,10 +190,10 @@ class ICalendarParser:
             return event
 
         except Exception as e:
-            logger.error("Failed to parse VEVENT %s: %s", vevent.get('UID'), e)
+            logger.error("Failed to parse VEVENT %s: %s", vevent.get("UID"), e)
             return None
 
-    def _convert_to_datetime(self, dt) -> datetime | None:
+    def _convert_to_datetime(self, dt: Any) -> datetime | None:
         """Convert various datetime formats to Python datetime.
 
         Args:
@@ -200,9 +205,10 @@ class ICalendarParser:
         if isinstance(dt, datetime):
             # Remove timezone info to make it naive for comparison
             return dt.replace(tzinfo=None)
-        elif hasattr(dt, 'datetime'):
-            return dt.datetime().replace(tzinfo=None)
-        elif hasattr(dt, 'date'):
+        elif hasattr(dt, "datetime"):
+            result: datetime = dt.datetime().replace(tzinfo=None)
+            return result
+        elif hasattr(dt, "date"):
             # Convert date to datetime at midnight
             return datetime.combine(dt.date(), datetime.min.time())
         else:
@@ -225,8 +231,8 @@ class ICalendarParser:
         # Extract the calendar directory name from the path
         # Format: .../calendar/CALENDAR_ID/FILE.ics
         path = Path(file_path)
-        if 'calendar' in path.parts:
-            calendar_idx = path.parts.index('calendar')
+        if "calendar" in path.parts:
+            calendar_idx = path.parts.index("calendar")
             if calendar_idx + 1 < len(path.parts):
                 return path.parts[calendar_idx + 1]
 
@@ -236,7 +242,7 @@ class ICalendarParser:
         self,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
-        calendar_id: str | None = None
+        calendar_id: str | None = None,
     ) -> list[CalendarEvent]:
         """Get all calendar events from .ics files with optional filtering.
 
@@ -291,14 +297,16 @@ class ICalendarParser:
 
         calendars = []
         for i, calendar_id in enumerate(sorted(calendar_ids)):
-            calendars.append({
-                'calendar_id': calendar_id,
-                'name': f'Calendar {calendar_id}',
-                'color': None,
-                'is_default': i == 0,  # First one is default
-                'is_shared': False,
-                'owner': None,
-            })
+            calendars.append(
+                {
+                    "calendar_id": calendar_id,
+                    "name": f"Calendar {calendar_id}",
+                    "color": None,
+                    "is_default": i == 0,  # First one is default
+                    "is_shared": False,
+                    "owner": None,
+                }
+            )
 
         logger.info("Retrieved %d calendars from .ics files", len(calendars))
         return calendars

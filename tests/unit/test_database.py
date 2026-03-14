@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from macoutlook.core.database import OutlookDatabase, _KNOWN_TABLES
+from macoutlook.core.database import _KNOWN_TABLES, OutlookDatabase
 from macoutlook.exceptions import DatabaseConnectionError, DatabaseNotFoundError
 
 
@@ -101,7 +101,9 @@ class TestOutlookDatabase:
 class TestDatabaseDiscovery:
     def test_find_database_path_missing(self):
         db = OutlookDatabase()
-        with patch.object(Path, "exists", return_value=False):
-            with patch.object(Path, "rglob", return_value=iter([])):
-                with pytest.raises(DatabaseNotFoundError):
-                    db.find_database_path()
+        with (
+            patch.object(Path, "exists", return_value=False),
+            patch.object(Path, "rglob", return_value=iter([])),
+            pytest.raises(DatabaseNotFoundError),
+        ):
+            db.find_database_path()

@@ -15,12 +15,27 @@ from ..exceptions import (
 logger = logging.getLogger(__name__)
 
 # Known tables in the Outlook database (allowlist for table_info/row_count)
-_KNOWN_TABLES = frozenset({
-    "Mail", "CalendarEvents", "Contacts", "Folders", "Calendars",
-    "Conversations", "Files", "Notes", "Tasks", "Categories",
-    "AccountsMail", "AccountsExchange", "Settings", "Signatures",
-    "Rules", "Threads", "Main",
-})
+_KNOWN_TABLES = frozenset(
+    {
+        "Mail",
+        "CalendarEvents",
+        "Contacts",
+        "Folders",
+        "Calendars",
+        "Conversations",
+        "Files",
+        "Notes",
+        "Tasks",
+        "Categories",
+        "AccountsMail",
+        "AccountsExchange",
+        "Settings",
+        "Signatures",
+        "Rules",
+        "Threads",
+        "Main",
+    }
+)
 
 
 class OutlookDatabase:
@@ -72,7 +87,9 @@ class OutlookDatabase:
             logger.info("Found Outlook database via recursive search: %s", match)
             return match
 
-        logger.error("Outlook database not found (searched %d paths)", len(searched_paths))
+        logger.error(
+            "Outlook database not found (searched %d paths)", len(searched_paths)
+        )
         raise DatabaseNotFoundError(searched_paths)
 
     def connect(self) -> None:
@@ -100,7 +117,9 @@ class OutlookDatabase:
                 self.conn.row_factory = sqlite3.Row
 
                 cursor = self.conn.cursor()
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' LIMIT 1")
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' LIMIT 1"
+                )
                 cursor.fetchone()
                 cursor.close()
 
@@ -110,7 +129,9 @@ class OutlookDatabase:
 
             except sqlite3.OperationalError as e:
                 if "database is locked" in str(e).lower():
-                    logger.warning("Database locked (attempt %d/%d)", attempt + 1, self.max_retries)
+                    logger.warning(
+                        "Database locked (attempt %d/%d)", attempt + 1, self.max_retries
+                    )
                     if attempt < self.max_retries - 1:
                         time.sleep(2**attempt)
                         continue
@@ -187,7 +208,7 @@ class OutlookDatabase:
         if table_name not in _KNOWN_TABLES:
             raise ValueError(f"Unknown table: {table_name}")
 
-        query = f"SELECT COUNT(*) as count FROM {table_name}"  # noqa: S608
+        query = f"SELECT COUNT(*) as count FROM {table_name}"  # noqa: S608  # nosec B608
         rows = self.execute_query(query)
         return rows[0]["count"] if rows else 0
 
@@ -195,5 +216,7 @@ class OutlookDatabase:
         self.connect()
         return self
 
-    def __exit__(self, exc_type: type | None, exc_val: Exception | None, exc_tb: object) -> None:
+    def __exit__(
+        self, exc_type: type | None, exc_val: Exception | None, exc_tb: object
+    ) -> None:
         self.disconnect()

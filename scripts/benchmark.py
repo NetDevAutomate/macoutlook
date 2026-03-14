@@ -14,7 +14,7 @@ Measures:
 """
 
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from macoutlook import ContentSource, create_client
 from macoutlook.core.message_source import MessageSourceReader
@@ -23,15 +23,19 @@ from macoutlook.search import FuzzyMatcher
 
 def timed(label: str):
     """Context manager for timing operations."""
+
     class Timer:
         def __init__(self):
             self.elapsed = 0.0
+
         def __enter__(self):
             self.start = time.perf_counter()
             return self
+
         def __exit__(self, *args):
             self.elapsed = time.perf_counter() - self.start
             print(f"  {label}: {self.elapsed:.3f}s")
+
     return Timer()
 
 
@@ -43,15 +47,15 @@ def benchmark_database():
 
     with timed("get_emails(limit=100)") as t:
         emails = client.get_emails(limit=100)
-    print(f"    -> {len(emails)} emails ({len(emails)/t.elapsed:.0f} emails/s)")
+    print(f"    -> {len(emails)} emails ({len(emails) / t.elapsed:.0f} emails/s)")
 
     with timed("get_emails(limit=1000)") as t:
         emails_1k = client.get_emails(limit=1000)
-    print(f"    -> {len(emails_1k)} emails ({len(emails_1k)/t.elapsed:.0f} emails/s)")
+    print(f"    -> {len(emails_1k)} emails ({len(emails_1k) / t.elapsed:.0f} emails/s)")
 
     with timed("get_emails(limit=5000)") as t:
         emails_5k = client.get_emails(limit=5000)
-    print(f"    -> {len(emails_5k)} emails ({len(emails_5k)/t.elapsed:.0f} emails/s)")
+    print(f"    -> {len(emails_5k)} emails ({len(emails_5k) / t.elapsed:.0f} emails/s)")
 
     with timed("search_emails(query='meeting')"):
         results = client.search_emails(query="meeting", limit=100)
@@ -81,7 +85,7 @@ def benchmark_index():
         return None
 
     # Warm load (from cache)
-    with timed("Warm index load (from cache)") as t:
+    with timed("Warm index load (from cache)"):
         count = reader.build_index()
     print(f"    -> {count} entries")
 
@@ -105,7 +109,6 @@ def benchmark_enrichment(emails, reader):
     enricher = EmailEnricher(source_reader=reader)
 
     # Single enrichment
-    matched = 0
     enriched_count = 0
     total_text_chars = 0
     total_html_chars = 0
@@ -121,12 +124,14 @@ def benchmark_enrichment(emails, reader):
                 total_html_chars += len(result.body_html or "")
                 total_attachments += len(result.attachments)
 
-    print(f"    -> {enriched_count}/{len(sample)} enriched ({enriched_count/len(sample)*100:.0f}%)")
+    print(
+        f"    -> {enriched_count}/{len(sample)} enriched ({enriched_count / len(sample) * 100:.0f}%)"
+    )
     if enriched_count > 0:
-        print(f"    -> avg text: {total_text_chars/enriched_count:.0f} chars")
-        print(f"    -> avg html: {total_html_chars/enriched_count:.0f} chars")
+        print(f"    -> avg text: {total_text_chars / enriched_count:.0f} chars")
+        print(f"    -> avg html: {total_html_chars / enriched_count:.0f} chars")
         print(f"    -> total attachments: {total_attachments}")
-        print(f"    -> {t.elapsed/len(sample)*1000:.0f}ms per email")
+        print(f"    -> {t.elapsed / len(sample) * 1000:.0f}ms per email")
 
 
 def benchmark_fuzzy_search():
@@ -145,10 +150,17 @@ def benchmark_fuzzy_search():
 
     # Matcher micro-benchmark
     matcher = FuzzyMatcher()
-    names = ["Andy Taylor", "Andrew Taylor", "A. Taylor", "Thomas Anderson",
-             "Jane Smith", "Taylor Swift", "Bob Taylor-Jones"]
+    names = [
+        "Andy Taylor",
+        "Andrew Taylor",
+        "A. Taylor",
+        "Thomas Anderson",
+        "Jane Smith",
+        "Taylor Swift",
+        "Bob Taylor-Jones",
+    ]
 
-    with timed(f"FuzzyMatcher.match() x {len(names)*1000}"):
+    with timed(f"FuzzyMatcher.match() x {len(names) * 1000}"):
         for _ in range(1000):
             for name in names:
                 matcher.match("Andy Taylor", name)
@@ -164,11 +176,15 @@ def benchmark_content_quality(emails):
     with_message_id = sum(1 for e in emails if e.message_id)
 
     print(f"  Emails sampled: {total}")
-    print(f"  With preview: {with_preview} ({with_preview/total*100:.1f}%)")
-    print(f"  With Message-ID: {with_message_id} ({with_message_id/total*100:.1f}%)")
+    print(f"  With preview: {with_preview} ({with_preview / total * 100:.1f}%)")
+    print(
+        f"  With Message-ID: {with_message_id} ({with_message_id / total * 100:.1f}%)"
+    )
     if preview_lengths:
-        print(f"  Preview length: avg={sum(preview_lengths)/len(preview_lengths):.0f}, "
-              f"min={min(preview_lengths)}, max={max(preview_lengths)}")
+        print(
+            f"  Preview length: avg={sum(preview_lengths) / len(preview_lengths):.0f}, "
+            f"min={min(preview_lengths)}, max={max(preview_lengths)}"
+        )
 
 
 def main():

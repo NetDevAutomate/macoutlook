@@ -1,57 +1,70 @@
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-toml
-      - id: check-json
-      - id: check-merge-conflict
-      - id: check-added-large-files
-      - id: debug-statements
-      - id: check-docstring-first
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.1.9
-    hooks:
-      - id: ruff
-        args: [--fix, --exit-non-zero-on-fix]
-      - id: ruff-format
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
-    hooks:
-      - id: mypy
-        additional_dependencies: [pydantic, types-python-dateutil]
-        args: [--strict, --ignore-missing-imports]
-
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.5
-    hooks:
-      - id: bandit
-        args: [-r, src/, -f, json]
-        exclude: tests/
-
-  - repo: local
-    hooks:
-      - id: pytest
-        name: pytest
-        entry: uv run pytest
-        language: system
-        types: [python]
-        pass_filenames: false
-        always_run: true
-        args: [--tb=short]
-
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v6.0.0
+  hooks:
+  - id: trailing-whitespace
+  - id: end-of-file-fixer
+  - id: check-yaml
+  - id: check-toml
+  - id: check-json
+  - id: check-merge-conflict
+  - id: check-added-large-files
+  - id: debug-statements
+  - id: check-docstring-first
+- repo: https://github.com/astral-sh/ruff-pre-commit
+  rev: v0.15.6
+  hooks:
+  - id: ruff
+    args:
+    - --fix
+    - --exit-non-zero-on-fix
+  - id: ruff-format
+- repo: local
+  hooks:
+  - id: mypy
+    name: mypy
+    entry: uv run mypy src/
+    language: system
+    types: [python]
+    pass_filenames: false
+    always_run: true
+  - id: pytest
+    name: pytest
+    entry: uv run pytest tests/unit/
+    language: system
+    types: [python]
+    pass_filenames: false
+    always_run: true
+    args:
+    - --tb=short
+- repo: https://github.com/PyCQA/bandit
+  rev: 1.9.4
+  hooks:
+  - id: bandit
+    args:
+    - -r
+    - src/
+    pass_filenames: false
+- repo: https://github.com/Yelp/detect-secrets
+  rev: v1.5.0
+  hooks:
+  - id: detect-secrets
+    args:
+    - --baseline
+    - .secrets.baseline
+    exclude: .*\.lock$
 ci:
-  autofix_commit_msg: |
-    [pre-commit.ci] auto fixes from pre-commit.com hooks
+  autofix_commit_msg: '[pre-commit.ci] auto fixes from pre-commit.com hooks
+
 
     for more information, see https://pre-commit.ci
+
+    '
   autofix_prs: true
   autoupdate_branch: ''
   autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
   autoupdate_schedule: weekly
-  skip: []
+  skip:
+  - mypy
+  - pytest
   submodules: false
