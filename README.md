@@ -202,7 +202,7 @@ uv build
 
 ## Acknowledgements
 
-- **Jon Hammant** -- Discovered the `.olk15MsgSource` extraction approach that enables full email content recovery (858x improvement over database preview). See [CONTRIBUTORS.md](CONTRIBUTORS.md).
+- **Jon Hammant** -- Discovered the `.olk15MsgSource` extraction approach that enables full email content recovery (858x improvement over database preview). Also contributed fuzzing techniques and full-text search functionality that significantly improved library performance. See [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
 ## License
 
