@@ -1,8 +1,8 @@
-# Contributing to PyOutlook-DB
+# Contributing to macoutlook
 
-Thank you for your interest in contributing to PyOutlook-DB! This document provides guidelines and information for contributors.
+Thank you for your interest in contributing to macoutlook! This document provides guidelines and information for contributors.
 
-## 🤝 How to Contribute
+## How to Contribute
 
 ### Reporting Issues
 
@@ -34,8 +34,8 @@ We love pull requests! Here's how to contribute code:
 
 ```bash
 # Fork the repository on GitHub, then:
-git clone https://github.com/your-username/pyoutlook-db.git
-cd pyoutlook-db
+git clone https://github.com/your-username/macoutlook.git
+cd macoutlook
 ```
 
 #### 2. Set Up Development Environment
@@ -70,20 +70,15 @@ git checkout -b fix/issue-description
 
 ```bash
 # Run all tests
-uv run pytest
+uv run pytest tests/unit/ -v
 
 # Run with coverage
-uv run pytest --cov=src/pyoutlook_db
-
-# Run specific test types
-uv run pytest tests/unit/
-uv run pytest tests/integration/
+uv run pytest --cov=src/macoutlook
 
 # Check code quality
 uv run ruff check .
 uv run ruff format .
 uv run mypy src/
-uv run bandit -r src/
 ```
 
 #### 6. Commit Your Changes
@@ -93,10 +88,10 @@ uv run bandit -r src/
 git add .
 
 # Commit with a descriptive message
-git commit -m "Add feature: brief description of what you added"
+git commit -m "feat: brief description of what you added"
 
 # Or for bug fixes:
-git commit -m "Fix: brief description of what you fixed"
+git commit -m "fix: brief description of what you fixed"
 ```
 
 #### 7. Push and Create Pull Request
@@ -111,7 +106,7 @@ Then create a pull request on GitHub with:
 - **Reference to issues** if applicable (e.g., "Fixes #123")
 - **Screenshots or examples** if UI/output changes
 
-## 📋 Coding Standards
+## Coding Standards
 
 ### Python Code Style
 
@@ -122,6 +117,8 @@ We follow PEP 8 with these specific requirements:
 - **Type hints**: Required for all function signatures
 - **Docstrings**: Google format for all public functions/classes
 - **Imports**: Organized in three groups (standard library, third-party, local)
+- **Logging**: stdlib `logging` throughout (NOT structlog)
+- **Paths**: `pathlib.Path` exclusively (no `os.path`)
 
 ### Code Quality Tools
 
@@ -137,16 +134,9 @@ uv run ruff check .
 # Type checking
 uv run mypy src/
 
-# Security scanning
-uv run bandit -r src/
+# Or run everything via pre-commit
+uv run pre-commit run --all-files
 ```
-
-### Documentation
-
-- **Docstrings**: Use Google format for all public APIs
-- **Type hints**: Include comprehensive type annotations
-- **Comments**: Explain complex logic, not obvious code
-- **README updates**: Update examples if you change public APIs
 
 ### Testing
 
@@ -154,6 +144,7 @@ uv run bandit -r src/
 - **Test types**: Write unit tests for all new functions
 - **Test naming**: Use descriptive names explaining the scenario
 - **Fixtures**: Use pytest fixtures for common test setup
+- **Mocking**: Mock `OutlookDatabase` via DI (no singletons to patch)
 
 Example test structure:
 ```python
@@ -171,47 +162,41 @@ def test_should_return_emails_when_valid_date_range_provided():
     assert len(emails) >= 0
 ```
 
-## 🏗️ Project Structure
-
-Understanding the codebase structure:
+## Project Structure
 
 ```
-pyoutlook-db/
-├── src/pyoutlook_db/           # Main package
-│   ├── core/                   # Core functionality
-│   │   ├── client.py          # Main OutlookClient class
-│   │   ├── database.py        # Database connection handling
-│   │   └── exceptions.py      # Custom exceptions
-│   ├── models/                 # Data models
-│   │   ├── email.py           # Email message models
-│   │   └── calendar.py        # Calendar event models
-│   ├── parsers/                # Content parsing
-│   │   ├── content.py         # HTML/text parsing
-│   │   └── icalendar.py       # .ics file parsing
-│   └── cli/                    # Command line interface
-│       └── main.py            # CLI commands
-├── tests/                      # Test suite
-│   ├── unit/                  # Unit tests
-│   ├── integration/           # Integration tests
-│   └── fixtures/              # Test data
-└── docs/                      # Documentation
+macoutlook/
+├── src/macoutlook/                # Main package
+│   ├── core/                      # Core functionality
+│   │   ├── client.py              # Main OutlookClient class
+│   │   ├── database.py            # Database connection handling
+│   │   ├── enricher.py            # Email content enrichment
+│   │   └── message_source.py      # .olk15MsgSource file reader
+│   ├── models/                    # Pydantic v2 data models
+│   │   ├── email_message.py       # EmailMessage, AttachmentInfo
+│   │   ├── calendar.py            # CalendarEvent, Calendar
+│   │   └── enums.py               # ContentSource, FlagStatus, Priority
+│   ├── parsers/                   # Content parsing
+│   │   ├── content.py             # HTML → text/markdown
+│   │   └── icalendar.py           # .ics file parsing
+│   ├── cli/                       # Command line interface
+│   │   └── main.py                # Click-based CLI commands
+│   └── exceptions.py              # OutlookDBError hierarchy
+├── tests/                         # Test suite
+│   └── unit/                      # Unit tests
+├── scripts/                       # Utility scripts
+└── docs/                          # Documentation
 ```
 
-## 🐛 Development Tips
+## Development Tips
 
 ### Local Testing
 
 ```bash
 # Test with your local Outlook database
-uv run python -c "
-from pyoutlook_db import OutlookClient
-client = OutlookClient()
-print(f'Connected to database with {len(client.get_emails_by_date_range(...))} emails')
-"
-
-# Test CLI commands
-uv run pyoutlook-db info
-uv run pyoutlook-db emails --limit 5
+uv run macoutlook info
+uv run macoutlook emails --limit 5
+uv run macoutlook search --query "meeting"
 ```
 
 ### Common Issues
@@ -224,24 +209,19 @@ uv run pyoutlook-db emails --limit 5
 ### Debugging
 
 ```python
-import structlog
 import logging
 
 # Enable debug logging
-structlog.configure(
-    wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG)
-)
+logging.basicConfig(level=logging.DEBUG)
 
-# Use the logger in your code
-logger = structlog.get_logger(__name__)
-logger.debug("Debug information", extra_data="value")
+logger = logging.getLogger("macoutlook")
+logger.setLevel(logging.DEBUG)
 ```
 
-## 📝 Commit Message Guidelines
+## Commit Message Guidelines
 
-Use clear, descriptive commit messages:
+Use [Conventional Commits](https://www.conventionalcommits.org/) format:
 
-### Format
 ```
 type: brief description
 
@@ -260,49 +240,29 @@ not how (the code explains how).
 - `refactor`: Code refactoring
 - `test`: Adding or updating tests
 - `chore`: Maintenance tasks
+- `ci`: CI/CD changes
 
-### Examples
-```
-feat: add support for calendar filtering by organizer
-
-Add new search parameter to filter calendar events by organizer
-email address, supporting both exact matches and partial matches.
-
-Fixes #45
-```
-
-```
-fix: handle null timestamp values in email parsing
-
-Email parsing was failing when timestamp fields contained null
-values. Added proper null checking and default values.
-
-Closes #67
-```
-
-## 🚀 Release Process
+## Release Process
 
 For maintainers preparing releases:
 
-1. **Update version** in `pyproject.toml`
+1. **Update version** in `src/macoutlook/__init__.py`
 2. **Update CHANGELOG.md** with new version
 3. **Run full test suite** and ensure all passes
-4. **Create GitHub release** with changelog notes
-5. **Build and test package** locally before publishing
+4. **Trigger publish workflow** from GitHub Actions (workflow_dispatch)
 
-## 📞 Getting Help
+## Getting Help
 
 If you need help:
 
 1. **Check existing issues** and discussions
 2. **Read the documentation** thoroughly
 3. **Ask questions** in GitHub discussions
-4. **Be patient and respectful** - this is maintained by volunteers
 
-## 📄 License
+## License
 
-By contributing to PyOutlook-DB, you agree that your contributions will be licensed under the MIT License.
+By contributing to macoutlook, you agree that your contributions will be licensed under the MIT License.
 
 ---
 
-Thank you for contributing to PyOutlook-DB! Your efforts help make this library better for everyone. 🎉
+Thank you for contributing to macoutlook!
