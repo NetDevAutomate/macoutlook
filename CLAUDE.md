@@ -1,135 +1,96 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with code in this repository.
 
 ## Project Overview
 
-pyoutlook-db is a Python library that provides programmatic access to Microsoft Outlook's SQLite database on macOS. It extracts emails, calendar events, and other Outlook data directly from the database, with automatic content parsing and conversion to JSON/Markdown formats for LLM processing.
+macoutlook is a Python library for extracting email and calendar data from macOS Outlook. It reads both the Outlook SQLite database (metadata + preview) and `.olk15MsgSource` files (full RFC 2822 MIME content) for complete email extraction.
+
+**Attribution**: The `.olk15MsgSource` extraction approach was discovered by Jon Hammant.
 
 ### Core Architecture
 
-The library follows a layered architecture:
+Layered architecture with dependency injection:
 
-- **Client Layer** (`core/client.py`): High-level `OutlookClient` class that orchestrates database access and content parsing
-- **Database Layer** (`core/database.py`): `OutlookDatabase` class for SQLite connection management with automatic database discovery
-- **Models Layer** (`models/`): Pydantic models for emails and calendar events with validation
-- **Parsers Layer** (`parsers/`): Content parsing for HTML/XML to text and Markdown conversion
-- **CLI Layer** (`cli/main.py`): Command-line interface using Click framework
+- **Client Layer** (`core/client.py`): `OutlookClient` orchestrator, `create_client()` factory
+- **Database Layer** (`core/database.py`): `OutlookDatabase` for SQLite with read-only access
+- **Models Layer** (`models/`): Pydantic v2 models with `ConfigDict(frozen=True)`
+  - `models/email_message.py`: `EmailMessage`, `AttachmentInfo`
+  - `models/calendar.py`: `CalendarEvent`, `Calendar`
+  - `models/enums.py`: `ContentSource`, `FlagStatus`, `Priority` (StrEnum/IntEnum)
+- **Parsers Layer** (`parsers/`): Content parsing (HTML -> text/markdown)
+- **CLI Layer** (`cli/main.py`): Click-based CLI (`macoutlook` command)
+- **Exceptions** (`exceptions.py`): `OutlookDBError` hierarchy at package root
 
 ### Key Design Patterns
 
-- **Context Managers**: Database connections support `with` statements for automatic cleanup
-- **Factory Pattern**: `get_database()` function provides shared database instances
-- **Content Strategy**: Pluggable content parsers via `get_content_parser()`
-- **Auto-Discovery**: Database path finding uses macOS-specific search patterns in `~/Library/Group Containers/UBF8T346G9.Office/Outlook/`
+- **Dependency Injection**: `OutlookClient.__init__` accepts `database`, `enricher`, etc.
+- **Context Managers**: Database and client support `with` statements
+- **Lazy Enrichment**: Emails return metadata-only by default; full content on demand
+- **Never-Raises Enrichment**: `EnrichmentResult` returns errors, never raises exceptions
+- **Typed Enums**: `ContentSource(StrEnum)`, `FlagStatus(IntEnum)`, `Priority(IntEnum)`
+
+### Key Conventions
+
+- **stdlib `logging`** throughout (NOT structlog — this is a library)
+- **`pathlib.Path`** exclusively (no `os.path`, no `import glob`)
+- **Pydantic v2 API**: `ConfigDict`, `@field_validator`, `@model_validator`, `.model_dump()`
+- **Parameterized SQL**: No f-string interpolation. Table names allowlisted.
 
 ## Development Commands
 
-### Environment Setup
 ```bash
-# Install dependencies and dev tools
+# Install dependencies
 uv sync --dev
 
-# Install pre-commit hooks
-uv run pre-commit install
-```
+# Run tests
+uv run pytest tests/unit/ -v
 
-### Code Quality
-```bash
-# Run all linting and formatting
+# Lint and format
 uv run ruff check .
 uv run ruff format .
 uv run mypy src/
 
-# Security scanning
-uv run bandit -r src/
-uv run safety check
-```
-
-### Testing
-```bash
-# Run all tests with coverage
-uv run pytest
-
-# Run specific test types
-uv run pytest tests/unit/ -v
-uv run pytest tests/integration/ -v
-
-# Run tests excluding slow ones
-uv run pytest -m "not slow"
-
-# Run tests for macOS-specific functionality
-uv run pytest -m macos
-```
-
-### CLI Testing
-```bash
-# Test CLI commands (requires Outlook database)
-uv run pyoutlook-db info
-uv run pyoutlook-db emails --start-date 2024-01-01 --limit 5
-uv run pyoutlook-db calendars --format json
-```
-
-### Build and Package
-```bash
 # Build wheel
 uv build
 
-# Install locally for testing
-uv pip install -e .
+# CLI
+uv run macoutlook info
+uv run macoutlook emails --limit 5
+uv run macoutlook search --query "meeting"
 ```
 
-## Database Schema Knowledge
+## Database Schema
 
-The library expects Outlook SQLite database with these key tables:
-- `Messages`: Email data with fields like `RecordID`, `Subject`, `SenderEmailAddress`, `Body`, `DateReceived`
-- `Events`: Calendar events with `EventID`, `CalendarID`, `Subject`, `StartTime`, `EndTime`
-- `Calendars`: Calendar metadata with `CalendarID`, `CalendarName`, `IsDefault`
+The `Mail` table has 46 columns. Key fields:
 
-## Platform-Specific Considerations
+| Column | Usage |
+|--------|-------|
+| `Record_RecordID` | Internal DB ID (`record_id` on model) |
+| `Message_MessageID` | RFC 2822 Message-ID (`message_id` on model, 100% coverage) |
+| `Message_Preview` | Preview snippet (~256 chars, `preview` field) |
+| `Message_NormalizedSubject` | Email subject |
+| `Message_SenderAddressList` | Sender email |
+| `Message_TimeReceived` | Timestamp (Unix epoch) |
+| `Message_TimeSent` | Sent timestamp |
+| `Message_Size` | Message size in bytes |
+| `Message_ReadFlag` | Read status |
+| `Record_FlagStatus` | Flag status (0=none, 1=flagged, 2=complete) |
+| `Record_Priority` | Priority (1=low, 3=normal, 5=high) |
 
-### macOS Requirements
-- Only works on macOS (Windows/Linux not supported)
-- Requires Microsoft Outlook for Mac to be installed
-- Database access requires Outlook to be closed or uses read-only mode
-- Uses macOS-specific Group Container paths for database discovery
+Source files: `~/Library/Group Containers/UBF8T346G9.Office/Outlook/Outlook 15 Profiles/Main Profile/Data/Message Sources/*.olk15MsgSource`
 
-### Error Handling Patterns
-- `DatabaseNotFoundError`: When Outlook database cannot be located
-- `DatabaseLockError`: When database is locked by Outlook application
-- `ValidationError`: For invalid date ranges or parameters
-- Retry logic with exponential backoff for database lock scenarios
+## Error Handling
+
+- `DatabaseNotFoundError`: Outlook database not found
+- `DatabaseLockError`: Database locked by Outlook
+- `DatabaseConnectionError`: Connection failures (renamed from `ConnectionError` to avoid builtin shadow)
+- `ParseError`: Content parsing failures
+- `MessageSourceError`: .olk15MsgSource file operations
 
 ## Testing Strategy
 
-### Unit Tests
-- Mock database connections for isolated testing
-- Test content parsing with sample HTML/XML data
-- Validate Pydantic model validation rules
-
-### Integration Tests
-- Require actual Outlook database for end-to-end testing
-- Test database discovery and connection logic
-- Validate SQL query generation and result parsing
-
-### Markers
-- `@pytest.mark.slow`: For tests that take significant time
-- `@pytest.mark.integration`: For tests requiring database access
-- `@pytest.mark.macos`: For macOS-specific functionality
-
-## Content Parsing Pipeline
-
-The library uses a multi-stage content parsing approach:
-1. Extract HTML/XML from Outlook database
-2. Clean and sanitize content using BeautifulSoup
-3. Convert to plain text for searchability
-4. Generate Markdown format for LLM consumption
-5. Preserve original HTML for full fidelity when needed
-
-## CLI Usage Patterns
-
-The CLI supports multiple output formats (JSON, CSV, table) and common operations:
-- Date-based email retrieval with folder filtering
-- Calendar event listing and searching
-- Full-text search across emails and events
-- Database inspection and statistics
+- Unit tests mock `OutlookDatabase` via DI (no singletons to patch)
+- Content parser tests use inline HTML fixtures
+- Catch `ValueError | KeyError` in row parsing (not bare `Exception`)
+- Markers: `@pytest.mark.integration`, `@pytest.mark.macos`, `@pytest.mark.slow`

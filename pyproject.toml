@@ -3,16 +3,16 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "pyoutlook-db"
+name = "macoutlook"
 dynamic = ["version"]
-description = "Python library for accessing Microsoft Outlook SQLite database on macOS"
+description = "Python library for extracting email and calendar data from macOS Outlook"
 readme = "README.md"
 requires-python = ">=3.12"
 license = {text = "MIT"}
 authors = [
-    {name = "Amazon Q Developer", email = "noreply@amazon.com"}
+    {name = "Andy Taylor"}
 ]
-keywords = ["outlook", "sqlite", "email", "calendar", "macos"]
+keywords = ["outlook", "sqlite", "email", "calendar", "macos", "mime"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -31,7 +31,6 @@ dependencies = [
     "click>=8.1.0",
     "pydantic>=2.0.0",
     "python-dateutil>=2.8.0",
-    "structlog>=23.0.0",
     "icalendar>=5.0.0",
 ]
 
@@ -39,32 +38,23 @@ dependencies = [
 dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
-    "pytest-asyncio>=0.21.0",
     "ruff>=0.1.0",
     "mypy>=1.5.0",
-    "bandit>=1.7.0",
-    "safety>=2.3.0",
     "pre-commit>=3.4.0",
-]
-analytics = [
-    "pandas>=2.0.0",
-    "numpy>=1.24.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/amazon-q-developer/pyoutlook-db"
-Documentation = "https://pyoutlook-db.readthedocs.io"
-Repository = "https://github.com/amazon-q-developer/pyoutlook-db"
-Issues = "https://github.com/amazon-q-developer/pyoutlook-db/issues"
+Repository = "https://github.com/taylaand/macoutlook"
+Issues = "https://github.com/taylaand/macoutlook/issues"
 
 [project.scripts]
-pyoutlook-db = "pyoutlook_db.cli.main:cli"
+macoutlook = "macoutlook.cli.main:cli"
 
 [tool.hatch.version]
-path = "src/pyoutlook_db/__init__.py"
+path = "src/macoutlook/__init__.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pyoutlook_db"]
+packages = ["src/macoutlook"]
 
 [tool.ruff]
 line-length = 88
@@ -83,21 +73,18 @@ select = [
     "SIM",  # flake8-simplify
     "S",    # bandit security
     "N",    # pep8-naming
-    "D",    # pydocstyle
 ]
 
 ignore = [
     "E501",  # Line too long (let ruff format handle it)
-    "D100",  # Missing docstring in public module
-    "D104",  # Missing docstring in public package
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]  # Allow unused imports
-"tests/*" = ["S101", "D"]  # Allow assert statements and skip docstrings in tests
+"__init__.py" = ["F401"]
+"tests/*" = ["S101", "D"]
 
-[tool.ruff.lint.pydocstyle]
-convention = "google"
+[tool.ruff.lint.isort]
+known-first-party = ["macoutlook"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -106,51 +93,40 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
 check_untyped_defs = true
-disallow_untyped_decorators = true
 no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
-warn_unreachable = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
 
+[[tool.mypy.overrides]]
+module = ["icalendar.*", "markdownify.*", "bs4.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py", "*_test.py"]
+pythonpath = ["src"]
+python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--cov=src/pyoutlook_db",
-    "--cov-report=term-missing",
-    "--cov-report=html",
-    "--cov-fail-under=80"
+    "--tb=short",
 ]
 
 markers = [
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "slow: marks tests as slow",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
     "macos: marks tests that require macOS",
 ]
 
-[tool.coverage.run]
-source = ["src"]
-omit = ["*/tests/*"]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "if self.debug:",
-    "if settings.DEBUG",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if 0:",
-    "if __name__ == .__main__.:",
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.0.0",
 ]

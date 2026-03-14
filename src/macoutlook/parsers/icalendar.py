@@ -1,19 +1,14 @@
-"""iCalendar (.ics) file parser for modern Outlook calendar data.
+"""iCalendar (.ics) file parser for modern Outlook calendar data."""
 
-This module provides functionality to parse .ics files from the modern Outlook
-data structure (Omc directories) and convert them to CalendarEvent objects.
-"""
-
-import glob
+import logging
 from datetime import datetime
 from pathlib import Path
 
-import structlog
 from icalendar import Calendar
 
 from ..models.calendar import CalendarEvent
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class ICalendarParser:
@@ -26,7 +21,7 @@ class ICalendarParser:
             outlook_profile_path: Optional path to Outlook profile directory
         """
         self.outlook_profile_path = outlook_profile_path
-        logger.info("Initialized ICalendarParser", profile_path=outlook_profile_path)
+        logger.info("Initialized ICalendarParser (profile_path=%s)", outlook_profile_path)
 
     def find_ics_files(self) -> list[str]:
         """Find all .ics files in the Outlook profile directory.
@@ -49,10 +44,10 @@ class ICalendarParser:
             )
 
         # Search for .ics files in the Omc calendar directories
-        search_pattern = str(base_path / "Omc" / "*" / "calendar" / "*" / "*.ics")
-        ics_files = glob.glob(search_pattern)
+        omc_path = base_path / "Omc"
+        ics_files = [str(p) for p in omc_path.rglob("*.ics")] if omc_path.exists() else []
 
-        logger.info("Found .ics files", count=len(ics_files), pattern=search_pattern)
+        logger.info("Found %d .ics files in %s", len(ics_files), omc_path)
         return ics_files
 
     def parse_ics_file(self, file_path: str) -> list[CalendarEvent]:
@@ -77,21 +72,13 @@ class ICalendarParser:
                         if event:
                             events.append(event)
                     except Exception as e:
-                        logger.warning(
-                            "Failed to parse event in .ics file",
-                            file=file_path,
-                            error=str(e)
-                        )
+                        logger.warning("Failed to parse event in %s: %s", file_path, e)
                         continue
 
         except Exception as e:
-            logger.error(
-                "Failed to parse .ics file",
-                file=file_path,
-                error=str(e)
-            )
+            logger.error("Failed to parse .ics file %s: %s", file_path, e)
 
-        logger.debug("Parsed .ics file", file=file_path, events_count=len(events))
+        logger.debug("Parsed %s: %d events", file_path, len(events))
         return events
 
     def _parse_vevent(self, vevent, file_path: str) -> CalendarEvent | None:
@@ -116,7 +103,7 @@ class ICalendarParser:
             dtend = vevent.get('DTEND')
 
             if not dtstart or not dtend:
-                logger.warning("Event missing start or end time", uid=uid)
+                logger.warning("Event missing start or end time: %s", uid)
                 return None
 
             # Convert to datetime objects
@@ -124,7 +111,7 @@ class ICalendarParser:
             end_time = self._convert_to_datetime(dtend.dt)
 
             if not start_time or not end_time:
-                logger.warning("Failed to parse event times", uid=uid)
+                logger.warning("Failed to parse event times: %s", uid)
                 return None
 
             # Extract additional properties
@@ -141,11 +128,14 @@ class ICalendarParser:
 
             # Extract attendees
             attendees = []
-            for attendee in vevent.get('ATTENDEE', []):
-                if isinstance(attendee, list):
-                    attendees.extend([str(a).replace('mailto:', '') for a in attendee])
-                else:
-                    attendees.append(str(attendee).replace('mailto:', ''))
+            raw_attendees = vevent.get('ATTENDEE', [])
+            # Single attendee returns a vCalAddress (str subclass), not a list
+            if isinstance(raw_attendees, str):
+                raw_attendees = [raw_attendees]
+            elif not isinstance(raw_attendees, list):
+                raw_attendees = list(raw_attendees) if raw_attendees else []
+            for attendee in raw_attendees:
+                attendees.append(str(attendee).replace('mailto:', ''))
 
             # Extract categories
             categories = []
@@ -195,7 +185,7 @@ class ICalendarParser:
             return event
 
         except Exception as e:
-            logger.error("Failed to parse VEVENT", error=str(e), uid=vevent.get('UID'))
+            logger.error("Failed to parse VEVENT %s: %s", vevent.get('UID'), e)
             return None
 
     def _convert_to_datetime(self, dt) -> datetime | None:
@@ -220,7 +210,7 @@ class ICalendarParser:
                 dt_obj = datetime.fromisoformat(str(dt))
                 return dt_obj.replace(tzinfo=None)
             except (ValueError, TypeError):
-                logger.warning("Could not convert to datetime", value=str(dt))
+                logger.warning("Could not convert to datetime: %s", dt)
                 return None
 
     def _extract_calendar_id_from_path(self, file_path: str) -> str:
@@ -282,13 +272,7 @@ class ICalendarParser:
         # Sort by start time
         all_events.sort(key=lambda e: e.start_time)
 
-        logger.info(
-            "Retrieved calendar events from .ics files",
-            total_events=len(all_events),
-            start_date=start_date,
-            end_date=end_date,
-            calendar_id=calendar_id
-        )
+        logger.info("Retrieved %d calendar events from .ics files", len(all_events))
 
         return all_events
 
@@ -316,5 +300,5 @@ class ICalendarParser:
                 'owner': None,
             })
 
-        logger.info("Retrieved calendars from .ics files", count=len(calendars))
+        logger.info("Retrieved %d calendars from .ics files", len(calendars))
         return calendars

@@ -185,5 +185,5 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-# uv
-uv.lock
+# uv — lock file tracked for reproducible CI
+# uv.lock

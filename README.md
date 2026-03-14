@@ -1,348 +1,209 @@
-# PyOutlook-DB
+# macoutlook
 
 [![Python Version](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-A high-performance Python library for accessing Microsoft Outlook's SQLite database on macOS. Extract emails, calendar events, and contacts directly from Outlook's local database with full-text search, content parsing, and multiple export formats.
+A Python library for extracting email and calendar data from Microsoft Outlook on macOS. Reads both the Outlook SQLite database and `.olk15MsgSource` files for full email content extraction with automatic HTML/XML parsing and Markdown conversion.
 
-## 🚀 Features
+## Performance
 
-- **📧 Email Access**: Retrieve 70,000+ emails with full metadata and content
-- **📅 Calendar Integration**: Access both historical SQLite events and modern .ics files
-- **🔍 Advanced Search**: Full-text search across subjects, content, and metadata
-- **📊 Rich Content Parsing**: HTML to Markdown conversion with link/image extraction
-- **⚡ High Performance**: Direct database access without API rate limits or timeouts
-- **🎯 Multiple Formats**: Export to JSON, CSV, or structured Python objects
-- **🛠️ CLI Interface**: Command-line tools for quick data access and analysis
-- **📈 Analytics Ready**: Built-in statistics and aggregation capabilities
+| Metric | Database Only | With Message Sources |
+|--------|--------------|---------------------|
+| Content | Preview (~256 chars) | Full email body |
+| Extraction ratio | 0.1% | 85%+ |
+| Avg words/email | ~50 | 450+ |
 
-## 📋 Requirements
+## Requirements
 
-- **macOS**: Required (Windows/Linux not supported)
-- **Python**: 3.12 or higher
-- **Microsoft Outlook for Mac**: Must be installed with local data
-- **Database Access**: Outlook should be closed or library uses read-only mode
+- **macOS** (Windows/Linux not supported)
+- **Python 3.12+**
+- **Microsoft Outlook for Mac** installed with local data
 
-## 🔧 Installation
-
-### Using uv (Recommended)
+## Installation
 
 ```bash
-uv add pyoutlook-db
+uv add macoutlook
 ```
 
-### Using pip
-
 ```bash
-pip install pyoutlook-db
+pip install macoutlook
 ```
 
-### Development Installation
+### Development
 
 ```bash
-git clone https://github.com/your-username/pyoutlook-db.git
-cd pyoutlook-db
+git clone https://github.com/taylaand/macoutlook.git
+cd macoutlook
 uv sync --dev
 ```
 
-## 🎯 Quick Start
-
-### Command Line Interface
-
-```bash
-# Get database information
-pyoutlook-db info
-
-# List recent emails
-pyoutlook-db emails --start-date 2024-01-01 --limit 10
-
-# Search for specific emails
-pyoutlook-db search --query "AWS" --type email --limit 5
-
-# Export emails to JSON
-pyoutlook-db emails --format json --start-date 2024-06-01 > emails.json
-
-# List available calendars
-pyoutlook-db calendars --format table
-
-# Get calendar events
-pyoutlook-db events --start-date 2024-01-01 --end-date 2024-12-31
-```
+## Quick Start
 
 ### Python API
 
 ```python
-from pyoutlook_db import OutlookClient
-from datetime import datetime, timedelta
+from macoutlook import create_client
 
-# Initialize client
-client = OutlookClient()
+# Create client (auto-discovers Outlook database)
+client = create_client()
 
-# Get recent emails
-recent_emails = client.get_emails_by_date_range(
-    start_date=datetime.now() - timedelta(days=7),
-    end_date=datetime.now(),
-    limit=10
-)
+# Get recent emails (metadata + preview, fast)
+emails = client.get_emails(limit=10)
+for email in emails:
+    print(f"{email.subject} from {email.sender_name}")
+    print(f"  Preview: {email.preview[:100]}")
+    print(f"  Source: {email.content_source}")
 
-print(f"Found {len(recent_emails)} recent emails:")
-for email in recent_emails:
-    print(f"- {email.subject} (from: {email.sender_name})")
-    print(f"  📅 {email.timestamp.strftime('%Y-%m-%d %H:%M')}")
-    print(f"  📄 {len(email.content_text)} characters")
-    print()
+# Enrich a single email with full content from .olk15MsgSource
+enriched = client.enrich_email(emails[0])
+print(f"Full body: {len(enriched.body_text or '')} chars")
+print(f"Attachments: {len(enriched.attachments)}")
+
+# Batch enrich (builds index on first call)
+enriched_all = client.enrich_emails(emails)
+
+# Search with fuzzy sender matching
+results = client.search_emails(sender="Andy Taylor", fuzzy=True)
+# Finds emails from "Andrew Taylor", "A. Taylor", etc.
+
+# Calendar events
+events = client.get_calendar_events(limit=20)
+for event in events:
+    print(f"{event.title} at {event.start_time}")
+```
+
+### CLI
+
+```bash
+# Database info
+macoutlook info
+
+# List recent emails
+macoutlook emails --limit 10
 
 # Search emails
-from pyoutlook_db.models.email import EmailSearchFilter
+macoutlook search --query "meeting" --sender "taylor" --fuzzy
 
-search_filter = EmailSearchFilter(
-    query="AWS",
-    start_date=datetime(2024, 1, 1),
-    limit=5
-)
+# Calendar events
+macoutlook events --start-date 2025-01-01
 
-aws_emails = client.search_emails(search_filter)
-print(f"Found {len(aws_emails)} AWS-related emails")
-
-# Get calendar events
-events = client.get_calendar_events(
-    start_date=datetime(2024, 1, 1),
-    end_date=datetime(2024, 12, 31),
-    limit=20
-)
-
-print(f"Found {len(events)} calendar events:")
-for event in events:
-    print(f"- {event.title}")
-    print(f"  📅 {event.start_time.strftime('%Y-%m-%d %H:%M')}")
-    if event.location:
-        print(f"  📍 {event.location}")
-    print()
+# Build message source index (one-time, ~10 min for large mailboxes)
+macoutlook build-index
 ```
 
-## 📚 Comprehensive Examples
+## Architecture
 
-### Email Analytics
+```
+macoutlook/
+├── core/
+│   ├── client.py            # OutlookClient + create_client() factory
+│   ├── database.py          # OutlookDatabase (SQLite, read-only)
+│   ├── enricher.py          # EmailEnricher (never-raises pipeline)
+│   └── message_source.py    # MessageSourceReader (.olk15MsgSource)
+├── models/
+│   ├── email_message.py     # EmailMessage, AttachmentInfo
+│   ├── calendar.py          # CalendarEvent, Calendar
+│   └── enums.py             # ContentSource, FlagStatus, Priority
+├── parsers/
+│   ├── content.py           # HTML -> text/markdown
+│   └── icalendar.py         # .ics file parser
+├── search.py                # FuzzyMatcher
+├── cli/main.py              # Click CLI
+└── exceptions.py            # Error hierarchy
+```
+
+### Key Design Patterns
+
+- **Dependency Injection**: `OutlookClient` accepts components via constructor; `create_client()` for convenience
+- **Lazy Enrichment**: `get_emails()` returns metadata fast; `enrich_email()` parses MIME on demand
+- **Never-Raises Enrichment**: `EnrichmentResult` returns errors in the result, never raises exceptions
+- **Persistent Index**: Message-ID to file path mapping cached at `~/.cache/macoutlook/`
+
+### Content Sources
+
+The library reads from two data sources:
+
+1. **SQLite Database** (`Outlook.sqlite`): Email metadata, preview text (~256 chars), calendar events. Fast, always available.
+
+2. **Message Source Files** (`.olk15MsgSource`): Full RFC 2822 MIME email content. Located in `~/Library/Group Containers/UBF8T346G9.Office/Outlook/.../Message Sources/`. Contains complete body text, HTML, and attachments. Requires building an index first (`build-index` command).
+
+## API Reference
+
+### create_client()
 
 ```python
-from pyoutlook_db import OutlookClient
-from collections import Counter
-from datetime import datetime, timedelta
+from macoutlook import create_client
 
-client = OutlookClient()
-
-# Get last month's emails
-start_date = datetime.now() - timedelta(days=30)
-emails = client.get_emails_by_date_range(
-    start_date=start_date,
-    end_date=datetime.now(),
-    limit=1000
+client = create_client(
+    db_path=None,              # Auto-discovers Outlook database
+    enable_enrichment=True,    # Set up .olk15MsgSource reader
 )
-
-# Analyze senders
-senders = Counter(email.sender_name or email.sender for email in emails)
-print("Top 10 senders:")
-for sender, count in senders.most_common(10):
-    print(f"  {sender}: {count} emails")
-
-# Read/unread statistics
-read_count = sum(1 for email in emails if email.is_read)
-print(f"Read emails: {read_count}/{len(emails)} ({read_count/len(emails)*100:.1f}%)")
 ```
-
-### Calendar Event Analysis
-
-```python
-from pyoutlook_db import OutlookClient
-from datetime import datetime
-
-# Access both historical and modern calendar data
-client = OutlookClient()
-
-# Historical events (SQLite database)
-historical_events = client.get_calendar_events(
-    start_date=datetime(2007, 1, 1),
-    end_date=datetime(2008, 12, 31),
-    limit=100
-)
-
-# Modern events (.ics files)
-modern_client = OutlookClient(use_ics=True)
-modern_events = modern_client.get_calendar_events(
-    start_date=datetime(2024, 1, 1),
-    end_date=datetime(2025, 12, 31)
-)
-
-print(f"Historical events: {len(historical_events)}")
-print(f"Modern events: {len(modern_events)}")
-```
-
-### Data Export
-
-```python
-import json
-from pyoutlook_db import OutlookClient
-from datetime import datetime
-
-client = OutlookClient()
-
-# Export recent emails to JSON
-emails = client.get_emails_by_date_range(
-    start_date=datetime(2024, 6, 1),
-    end_date=datetime(2024, 7, 1),
-    include_content=True
-)
-
-# Convert to JSON-serializable format
-emails_data = []
-for email in emails:
-    emails_data.append({
-        'id': email.message_id,
-        'subject': email.subject,
-        'sender': email.sender,
-        'timestamp': email.timestamp.isoformat(),
-        'content_text': email.content_text,
-        'recipients': email.recipients,
-        'size': email.message_size
-    })
-
-# Save to file
-with open('emails_export.json', 'w') as f:
-    json.dump(emails_data, f, indent=2)
-
-print(f"Exported {len(emails_data)} emails to emails_export.json")
-```
-
-## 📖 API Reference
 
 ### OutlookClient
 
-The main client class for accessing Outlook data.
-
-#### Constructor
-
 ```python
-OutlookClient(
-    db_path: str | None = None,
-    auto_connect: bool = True,
-    use_ics: bool = False
-)
+# Email retrieval
+client.get_emails(start_date=None, end_date=None, limit=1000, enrich=False)
+client.search_emails(query=None, sender=None, subject=None, fuzzy=False, limit=100)
+
+# Enrichment (requires build_index first)
+client.enrich_email(email, markdown=True)
+client.enrich_emails(emails, markdown=True)
+client.save_attachment(message_id, filename, dest_dir)
+
+# Calendar
+client.get_calendars()
+client.get_calendar_events(calendar_id=None, start_date=None, end_date=None)
+
+# Info
+client.get_database_info()
 ```
 
-**Parameters:**
-- `db_path`: Optional path to Outlook database file
-- `auto_connect`: Whether to automatically connect to database
-- `use_ics`: Whether to use .ics files for calendar data (modern events)
-
-#### Methods
-
-##### get_emails_by_date_range()
+### EmailMessage
 
 ```python
-get_emails_by_date_range(
-    start_date: datetime,
-    end_date: datetime,
-    folders: list[str] | None = None,
-    include_content: bool = True,
-    limit: int = 1000
-) -> list[EmailMessage]
+from macoutlook import EmailMessage, ContentSource
+
+email.message_id        # RFC 2822 Message-ID
+email.subject           # Email subject
+email.sender            # Sender email address
+email.sender_name       # Sender display name
+email.recipients        # To recipients
+email.cc_recipients     # CC recipients
+email.timestamp         # Received time
+email.preview           # Database preview (~256 chars)
+email.body_text         # Full plain text (after enrichment)
+email.body_html         # Full HTML (after enrichment)
+email.body_markdown     # Markdown conversion (after enrichment)
+email.attachments       # tuple[AttachmentInfo, ...]
+email.content_source    # ContentSource.MESSAGE_SOURCE or PREVIEW_ONLY
+email.is_read           # Read flag
+email.priority          # Priority.LOW / NORMAL / HIGH
+email.flag_status       # FlagStatus.NOT_FLAGGED / FLAGGED / COMPLETE
 ```
 
-Retrieve emails within a specific date range.
-
-##### search_emails()
-
-```python
-search_emails(search_filter: EmailSearchFilter) -> list[EmailMessage]
-```
-
-Search emails using advanced filters.
-
-##### get_calendar_events()
-
-```python
-get_calendar_events(
-    calendar_id: str | None = None,
-    start_date: datetime | None = None,
-    end_date: datetime | None = None,
-    limit: int = 1000
-) -> list[CalendarEvent]
-```
-
-Get calendar events with optional filtering.
-
-## 🧪 Testing
-
-Run the test suite:
+## Development
 
 ```bash
-# Install development dependencies
-uv sync --dev
+# Tests
+uv run pytest tests/unit/ -v
 
-# Run all tests
-uv run pytest
-
-# Run with coverage
-uv run pytest --cov=src/pyoutlook_db
-
-# Run specific test types
-uv run pytest tests/unit/
-uv run pytest tests/integration/
-```
-
-## 📝 Development
-
-### Code Quality
-
-```bash
-# Format code
+# Lint
+uv run ruff check .
 uv run ruff format .
 
-# Lint code
-uv run ruff check .
-
-# Type checking
+# Type check
 uv run mypy src/
 
-# Security scan
-uv run bandit -r src/
+# Build
+uv build
 ```
 
-### Pre-commit Hooks
+## Acknowledgements
 
-```bash
-uv run pre-commit install
-uv run pre-commit run --all-files
-```
+- **Jon Hammant** -- Discovered the `.olk15MsgSource` extraction approach that enables full email content recovery (858x improvement over database preview). See [CONTRIBUTORS.md](CONTRIBUTORS.md).
 
-## 🤝 Contributing
+## License
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass and code quality checks pass
-6. Commit your changes (`git commit -m 'Add amazing feature'`)
-7. Push to the branch (`git push origin feature/amazing-feature`)
-8. Open a Pull Request
-
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## ⚠️ Disclaimer
-
-This library accesses Microsoft Outlook's local SQLite database files. It is designed for personal use and data analysis. Always ensure you have backups of your data before using any database access tools.
-
-## 🙏 Acknowledgments
-
-- Microsoft Outlook team for the robust SQLite database structure
-- The Python community for excellent libraries like Pydantic, Click, and BeautifulSoup
-- Contributors and testers who helped improve this library
-
----
-
-**Made with ❤️ for the Python and macOS communities**
+MIT License. See [LICENSE](LICENSE) for details.
