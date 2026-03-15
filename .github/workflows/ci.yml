@@ -19,6 +19,17 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy src/
 
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+      - run: uv sync --locked --dev
+      - run: uvx bandit -r src/
+      - run: uvx detect-secrets@1.5.0 scan --baseline .secrets.baseline --list
+
   test:
     runs-on: macos-latest
     steps:
