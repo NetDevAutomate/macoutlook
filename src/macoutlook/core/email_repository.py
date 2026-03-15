@@ -212,7 +212,7 @@ class EmailRepository:
             Parsed EmailMessage with content_source=PREVIEW_ONLY.
 
         Raises:
-            ValueError: If required fields are missing or unparseable.
+            ValueError: If required fields are missing or unparsable.
             KeyError: If expected columns are absent from the row.
         """
         r = dict(row)  # type: ignore[call-overload]

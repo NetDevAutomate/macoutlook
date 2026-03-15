@@ -10,7 +10,13 @@ repos:
   - id: check-merge-conflict
   - id: check-added-large-files
   - id: debug-statements
+  - id: check-ast
   - id: check-docstring-first
+- repo: https://github.com/codespell-project/codespell
+  rev: v2.4.1
+  hooks:
+  - id: codespell
+    args: [--skip, "*.lock,*.baseline", --ignore-words-list, "ser"]
 - repo: https://github.com/astral-sh/ruff-pre-commit
   rev: v0.15.6
   hooks:
