@@ -6,7 +6,7 @@ email content extraction with automatic HTML/XML parsing and Markdown conversion
 Attribution: The .olk15MsgSource extraction approach was discovered by Jon Hammant.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 from .core.client import OutlookClient, create_client
 from .core.enricher import EmailEnricher, EnrichmentResult

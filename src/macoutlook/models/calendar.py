@@ -1,6 +1,6 @@
 """Calendar data models for macoutlook library."""
 
-from datetime import date, datetime
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import (
@@ -130,11 +130,3 @@ class CalendarEvent(BaseModel):
     @property
     def duration_minutes(self) -> int:
         return int((self.end_time - self.start_time).total_seconds() / 60)
-
-    @property
-    def is_today(self) -> bool:
-        return self.start_time.date() == date.today()
-
-    @property
-    def is_upcoming(self) -> bool:
-        return self.start_time > datetime.now()

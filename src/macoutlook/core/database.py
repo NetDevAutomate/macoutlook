@@ -177,26 +177,6 @@ class OutlookDatabase:
             logger.error("Query failed: %s", e)
             raise DatabaseConnectionError("Query failed", e) from e
 
-    def get_table_info(self, table_name: str) -> list[dict[str, Any]]:
-        """Get column information for a table (allowlisted names only)."""
-        if table_name not in _KNOWN_TABLES:
-            raise ValueError(f"Unknown table: {table_name}")
-
-        query = f"PRAGMA table_info({table_name})"  # noqa: S608
-        rows = self.execute_query(query)
-
-        return [
-            {
-                "cid": row["cid"],
-                "name": row["name"],
-                "type": row["type"],
-                "notnull": bool(row["notnull"]),
-                "dflt_value": row["dflt_value"],
-                "pk": bool(row["pk"]),
-            }
-            for row in rows
-        ]
-
     def get_table_names(self) -> list[str]:
         """Get list of all table names in the database."""
         query = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"

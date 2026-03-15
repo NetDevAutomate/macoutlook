@@ -7,8 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Initial project structure and documentation
+## [0.2.1] - 2026-03-15
+
+### Fixed
+- `save_attachment` now correctly skips binary preamble in `.olk15MsgSource` files
+- `is_all_day` detection for calendar events (was always returning False)
+- Double HTML parse eliminated in content pipeline (~50% CPU reduction)
+- CI workflow: dev tools moved to `[dependency-groups]` so `uv sync --dev` installs them
+- Pre-commit: replaced isolated `mirrors-mypy` with local `uv run mypy` hook
+- Pre-commit: fixed bandit `pass_filenames` conflict with `-r src/`
+- Type annotations: `Sequence[Any]` for list invariance, correct `type: ignore` codes
+
+### Security
+- Cache directory permissions hardened to 0o700, files to 0o600
+- Added 100MB file size limit on MIME source file parsing
+
+### Changed
+- FuzzyMatcher reuses SequenceMatcher instance and caches compiled regex patterns
+- Removed dead `sep` parameter from `_parse_delimited`
+- Removed unused `is_today`/`is_upcoming` properties from CalendarEvent
+- Removed unused `get_table_info` from OutlookDatabase
+- Removed phantom `python-dateutil` dependency (was never imported)
+- Updated CONTRIBUTING.md: renamed pyoutlook-db references, fixed project structure
+- Added pre-commit git author identity check
 
 ## [0.1.0] - 2025-07-01
 

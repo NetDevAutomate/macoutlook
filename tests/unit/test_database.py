@@ -69,11 +69,6 @@ class TestOutlookDatabase:
             assert "alpha" in tables
             assert "beta" in tables
 
-    def test_get_table_info_allowlist(self, tmp_path: Path):
-        db = OutlookDatabase(db_path=tmp_path / "test.sqlite")
-        with pytest.raises(ValueError, match="Unknown table"):
-            db.get_table_info("'; DROP TABLE users; --")
-
     def test_get_row_count_allowlist(self, tmp_path: Path):
         db = OutlookDatabase(db_path=tmp_path / "test.sqlite")
         with pytest.raises(ValueError, match="Unknown table"):
