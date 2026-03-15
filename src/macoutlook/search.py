@@ -33,6 +33,16 @@ class FuzzyMatcher:
         if not 0.0 <= threshold <= 1.0:
             raise ValueError(f"threshold must be 0.0-1.0, got {threshold}")
         self.threshold = threshold
+        self._matcher = SequenceMatcher()
+        self._pattern_cache: dict[str, re.Pattern[str]] = {}
+
+    def _get_word_boundary_pattern(self, term: str) -> re.Pattern[str]:
+        """Return a compiled word-boundary regex for *term*, cached."""
+        pattern = self._pattern_cache.get(term)
+        if pattern is None:
+            pattern = re.compile(r"\b" + re.escape(term) + r"\b")
+            self._pattern_cache[term] = pattern
+        return pattern
 
     def match(self, query: str, text: str) -> float:
         """Score how well query matches text.
@@ -50,8 +60,7 @@ class FuzzyMatcher:
             return 1.0
 
         # 2. Word boundary match — query appears as complete word(s) in text
-        pattern = r"\b" + re.escape(query_lower) + r"\b"
-        if re.search(pattern, text_lower):
+        if self._get_word_boundary_pattern(query_lower).search(text_lower):
             return 0.95
 
         # 3. Split-and-match — each query part matched independently
@@ -62,18 +71,18 @@ class FuzzyMatcher:
         matched_parts = 0
         for part in query_parts:
             # Check word boundary first
-            part_pattern = r"\b" + re.escape(part) + r"\b"
-            if re.search(part_pattern, text_lower):
+            if self._get_word_boundary_pattern(part).search(text_lower):
                 matched_parts += 1
                 continue
 
             # Fall back to SequenceMatcher for fuzzy comparison
-            # Compare against each word in text
+            # Compare against each word in text — reuse the single instance
+            self._matcher.set_seq1(part)
             for word in text_lower.split():
                 if len(word) < 2:
                     continue
-                ratio = SequenceMatcher(None, part, word).ratio()
-                if ratio >= self.threshold:
+                self._matcher.set_seq2(word)
+                if self._matcher.ratio() >= self.threshold:
                     matched_parts += 1
                     break
 

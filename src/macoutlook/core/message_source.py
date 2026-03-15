@@ -31,6 +31,11 @@ _DEFAULT_SOURCES_SUBPATH = "Outlook 15 Profiles/Main Profile/Data/Message Source
 _CACHE_DIR = Path.home() / ".cache" / "macoutlook"
 _INDEX_CACHE_FILE = _CACHE_DIR / "message_index.json"
 
+# Maximum size for .olk15MsgSource files (100 MB).
+# Files exceeding this are skipped to prevent memory exhaustion
+# from corrupted or oversized source files.
+_MAX_SOURCE_FILE_SIZE: int = 100 * 1024 * 1024
+
 
 @dataclass(frozen=True, slots=True)
 class MimeContent:
@@ -250,8 +255,20 @@ class MessageSourceReader:
         """Parse a complete MIME message from a .olk15MsgSource file.
 
         Skips the binary preamble and uses BytesParser with policy.default.
+        Files exceeding _MAX_SOURCE_FILE_SIZE are skipped to prevent
+        memory exhaustion from corrupted or oversized files.
         """
         try:
+            file_size = Path(file_path).stat().st_size
+            if file_size > _MAX_SOURCE_FILE_SIZE:
+                logger.warning(
+                    "Skipping oversized MIME file %s (%d bytes, limit %d)",
+                    file_path,
+                    file_size,
+                    _MAX_SOURCE_FILE_SIZE,
+                )
+                return None
+
             with open(file_path, "rb") as f:
                 raw = f.read()
 
@@ -388,9 +405,16 @@ class MessageSourceReader:
             return None
 
     def _save_cached_index(self, index: dict[str, str]) -> None:
-        """Persist index to disk cache."""
+        """Persist index to disk cache with restrictive permissions.
+
+        The cache contains Message-IDs and file paths which are
+        sensitive metadata. Directory is created with mode 0o700
+        (owner-only access) and the file is set to mode 0o600
+        (owner read/write only) to prevent other local users
+        from reading the index.
+        """
         try:
-            _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            _CACHE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
 
             data = dict(index)
             data["_meta"] = {  # type: ignore[assignment]
@@ -400,6 +424,8 @@ class MessageSourceReader:
 
             with open(_INDEX_CACHE_FILE, "w") as f:
                 json.dump(data, f)
+
+            _INDEX_CACHE_FILE.chmod(0o600)
 
             logger.info(
                 "Saved index cache (%d entries) to %s", len(index), _INDEX_CACHE_FILE

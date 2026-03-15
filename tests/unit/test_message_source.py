@@ -1,11 +1,12 @@
 """Unit tests for MessageSourceReader."""
 
 import os
+import stat
 from pathlib import Path
 
 import pytest
 
-from macoutlook.core.message_source import MessageSourceReader
+from macoutlook.core.message_source import _MAX_SOURCE_FILE_SIZE, MessageSourceReader
 
 
 def _write_mime_file(path: Path, message_id: str, body: str = "Hello world") -> None:
@@ -344,3 +345,185 @@ class TestIndexPersistence:
         assert count == 1
         assert reader_b.get_source_path("b@example.com") is not None
         assert reader_b.get_source_path("a@example.com") is None
+
+
+class TestCacheFilePermissions:
+    """Security: cache directory and file must have restrictive permissions."""
+
+    def test_cache_directory_created_with_mode_700(self, tmp_path: Path, monkeypatch):
+        cache_dir = tmp_path / "secure_cache"
+        cache_file = cache_dir / "message_index.json"
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._INDEX_CACHE_FILE", cache_file
+        )
+        monkeypatch.setattr("macoutlook.core.message_source._CACHE_DIR", cache_dir)
+
+        sources = tmp_path / "sources"
+        sources.mkdir()
+        _write_mime_file(sources / "test.olk15MsgSource", "perm@example.com")
+
+        reader = MessageSourceReader(sources_dir=sources)
+        reader.build_index(force=True)
+
+        assert cache_dir.exists()
+        dir_mode = cache_dir.stat().st_mode & 0o777
+        assert dir_mode == 0o700, (
+            f"Cache directory mode should be 0o700, got {oct(dir_mode)}"
+        )
+
+    def test_cache_file_written_with_mode_600(self, tmp_path: Path, monkeypatch):
+        cache_dir = tmp_path / "secure_cache"
+        cache_file = cache_dir / "message_index.json"
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._INDEX_CACHE_FILE", cache_file
+        )
+        monkeypatch.setattr("macoutlook.core.message_source._CACHE_DIR", cache_dir)
+
+        sources = tmp_path / "sources"
+        sources.mkdir()
+        _write_mime_file(sources / "test.olk15MsgSource", "perm@example.com")
+
+        reader = MessageSourceReader(sources_dir=sources)
+        reader.build_index(force=True)
+
+        assert cache_file.exists()
+        file_mode = cache_file.stat().st_mode & 0o777
+        assert file_mode == 0o600, (
+            f"Cache file mode should be 0o600, got {oct(file_mode)}"
+        )
+
+    def test_cache_file_not_world_readable(self, tmp_path: Path, monkeypatch):
+        cache_dir = tmp_path / "secure_cache"
+        cache_file = cache_dir / "message_index.json"
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._INDEX_CACHE_FILE", cache_file
+        )
+        monkeypatch.setattr("macoutlook.core.message_source._CACHE_DIR", cache_dir)
+
+        sources = tmp_path / "sources"
+        sources.mkdir()
+        _write_mime_file(sources / "test.olk15MsgSource", "perm@example.com")
+
+        reader = MessageSourceReader(sources_dir=sources)
+        reader.build_index(force=True)
+
+        file_mode = cache_file.stat().st_mode
+        # Neither group nor other should have any permissions
+        assert not (file_mode & stat.S_IRGRP), "Cache file should not be group-readable"
+        assert not (file_mode & stat.S_IROTH), "Cache file should not be world-readable"
+
+    def test_cache_content_still_valid_after_permission_fix(
+        self, tmp_path: Path, monkeypatch
+    ):
+        """Permissions fix must not break cache read/write functionality."""
+        cache_dir = tmp_path / "secure_cache"
+        cache_file = cache_dir / "message_index.json"
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._INDEX_CACHE_FILE", cache_file
+        )
+        monkeypatch.setattr("macoutlook.core.message_source._CACHE_DIR", cache_dir)
+
+        sources = tmp_path / "sources"
+        sources.mkdir()
+        _write_mime_file(sources / "test.olk15MsgSource", "valid@example.com")
+
+        # Build and save to cache
+        reader1 = MessageSourceReader(sources_dir=sources)
+        reader1.build_index(force=True)
+
+        # Load from restricted cache file -- must still work
+        reader2 = MessageSourceReader(sources_dir=sources)
+        count = reader2.build_index()
+        assert count == 1
+        assert reader2.get_source_path("valid@example.com") is not None
+
+
+class TestMimeFileSizeLimit:
+    """Security: oversized .olk15MsgSource files must be rejected."""
+
+    def test_max_source_file_size_constant_is_100mb(self):
+        assert _MAX_SOURCE_FILE_SIZE == 100 * 1024 * 1024
+
+    def test_oversized_file_returns_none(self, tmp_path: Path, monkeypatch):
+        """Files exceeding the size limit should be skipped, returning None."""
+        # Use a tiny limit for testing (1 KB)
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._MAX_SOURCE_FILE_SIZE", 1024
+        )
+
+        msg_file = tmp_path / "huge.olk15MsgSource"
+        # Write a file that exceeds 1 KB
+        body = "X" * 2048
+        _write_mime_file(msg_file, "huge@example.com", body=body)
+        assert msg_file.stat().st_size > 1024
+
+        reader = MessageSourceReader(sources_dir=tmp_path)
+        reader.build_index(force=True)
+        content = reader.get_content("huge@example.com")
+
+        assert content is None
+
+    def test_file_at_exact_limit_is_accepted(self, tmp_path: Path, monkeypatch):
+        """A file exactly at the size limit should be parsed normally."""
+        msg_file = tmp_path / "exact.olk15MsgSource"
+        _write_mime_file(msg_file, "exact@example.com", body="Small body")
+        file_size = msg_file.stat().st_size
+
+        # Set limit to exactly the file size
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._MAX_SOURCE_FILE_SIZE", file_size
+        )
+
+        reader = MessageSourceReader(sources_dir=tmp_path)
+        reader.build_index(force=True)
+        content = reader.get_content("exact@example.com")
+
+        assert content is not None
+        assert content.body_text is not None
+
+    def test_file_one_byte_over_limit_is_rejected(self, tmp_path: Path, monkeypatch):
+        """A file one byte over the limit should be rejected."""
+        msg_file = tmp_path / "over.olk15MsgSource"
+        _write_mime_file(msg_file, "over@example.com", body="Small body")
+        file_size = msg_file.stat().st_size
+
+        # Set limit to one byte less than the file size
+        monkeypatch.setattr(
+            "macoutlook.core.message_source._MAX_SOURCE_FILE_SIZE", file_size - 1
+        )
+
+        reader = MessageSourceReader(sources_dir=tmp_path)
+        reader.build_index(force=True)
+        content = reader.get_content("over@example.com")
+
+        assert content is None
+
+    def test_oversized_file_logs_warning(self, tmp_path: Path, monkeypatch, caplog):
+        """Skipping an oversized file should emit a warning log."""
+        monkeypatch.setattr("macoutlook.core.message_source._MAX_SOURCE_FILE_SIZE", 100)
+
+        msg_file = tmp_path / "big.olk15MsgSource"
+        _write_mime_file(msg_file, "big@example.com", body="X" * 200)
+
+        reader = MessageSourceReader(sources_dir=tmp_path)
+        reader.build_index(force=True)
+
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="macoutlook.core.message_source"):
+            content = reader.get_content("big@example.com")
+
+        assert content is None
+        assert "oversized" in caplog.text.lower() or "Skipping" in caplog.text
+
+    def test_normal_file_under_limit_parses_successfully(self, tmp_path: Path):
+        """Normal-sized files should parse without issue (regression guard)."""
+        msg_file = tmp_path / "normal.olk15MsgSource"
+        _write_mime_file(msg_file, "normal@example.com", body="Normal content")
+
+        reader = MessageSourceReader(sources_dir=tmp_path)
+        reader.build_index(force=True)
+        content = reader.get_content("normal@example.com")
+
+        assert content is not None
+        assert "Normal content" in content.body_text

@@ -517,8 +517,8 @@ def create_client(
     return OutlookClient(db_path=db_path, enricher=enricher)
 
 
-def _parse_delimited(value: str | None, sep: str = ";") -> list[str]:
-    """Parse a delimited string into a list of trimmed, non-empty strings."""
+def _parse_delimited(value: str | None) -> list[str]:
+    """Parse a semicolon/comma-delimited string into trimmed, non-empty strings."""
     if not value:
         return []
     return [item.strip() for item in value.replace(";", ",").split(",") if item.strip()]
