@@ -1,9 +1,14 @@
-"""Unit tests for OutlookClient class."""
+"""Unit tests for OutlookClient class.
+
+Tests verify the client's orchestration behaviour: connection management,
+delegation to repositories, enrichment wiring, and database info.
+Row-to-model parsing is tested in test_email_repository.py.
+"""
 
 from datetime import datetime
 from unittest.mock import Mock
 
-from macoutlook.core.client import OutlookClient, _parse_delimited
+from macoutlook.core.client import OutlookClient
 from macoutlook.core.database import OutlookDatabase
 from macoutlook.core.enricher import EmailEnricher, EnrichmentResult
 from macoutlook.models.email_message import AttachmentInfo, EmailMessage
@@ -301,30 +306,3 @@ class TestOutlookClientCalendar:
         assert info["db_path"] == "/fake/path"
         assert info["mail_count"] == 100
         assert info["calendarevents_count"] == 50
-
-
-class TestParseDelimited:
-    def test_none_returns_empty(self):
-        assert _parse_delimited(None) == []
-
-    def test_empty_string_returns_empty(self):
-        assert _parse_delimited("") == []
-
-    def test_single_value(self):
-        assert _parse_delimited("test@example.com") == ["test@example.com"]
-
-    def test_comma_separated(self):
-        result = _parse_delimited("a@example.com, b@example.com")
-        assert result == ["a@example.com", "b@example.com"]
-
-    def test_semicolon_separated(self):
-        result = _parse_delimited("a@example.com; b@example.com")
-        assert result == ["a@example.com", "b@example.com"]
-
-    def test_strips_whitespace(self):
-        result = _parse_delimited("  a@example.com ;  b@example.com  ")
-        assert result == ["a@example.com", "b@example.com"]
-
-    def test_filters_empty_values(self):
-        result = _parse_delimited("a@example.com;;; b@example.com")
-        assert result == ["a@example.com", "b@example.com"]

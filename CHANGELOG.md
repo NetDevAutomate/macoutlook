@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-03-15
+
+### Changed
+- **Architecture**: Extracted `EmailRepository` and `CalendarRepository` from `OutlookClient`, reducing it from 524 to 288 lines
+- **Protocols**: Added `DatabaseProtocol`, `EnricherProtocol`, `ContentParserProtocol` for structural typing and testability
+- **CLI**: All commands now use `create_client()` factory instead of constructing `OutlookClient` directly
+- SQL query construction moved from client layer to repository layer
+- Core Foundation timestamp helpers moved to `CalendarRepository`
+
+### Added
+- `core/protocols.py` — Protocol definitions for dependency injection
+- `core/email_repository.py` — Email queries, search, and row-to-model mapping
+- `core/calendar_repository.py` — Calendar queries, ICS/DB branching, timestamp conversion
+- 66 new repository tests across `test_email_repository.py` and `test_calendar_repository.py`
+
 ## [0.2.1] - 2026-03-15
 
 ### Fixed

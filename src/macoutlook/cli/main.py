@@ -9,7 +9,7 @@ from typing import Any
 
 import click
 
-from ..core.client import OutlookClient
+from ..core.client import create_client
 from ..exceptions import OutlookDBError
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ def emails(
         if not end_date:
             end_date = datetime.now()
 
-        client = OutlookClient(db_path=ctx.obj["db_path"])
+        client = create_client(db_path=ctx.obj["db_path"])
         emails_list = client.get_emails(
             start_date=start_date,
             end_date=end_date,
@@ -110,7 +110,7 @@ def emails(
 def calendars(ctx: click.Context, output_format: str) -> None:
     """List all available calendars."""
     try:
-        client = OutlookClient(db_path=ctx.obj["db_path"])
+        client = create_client(db_path=ctx.obj["db_path"])
         calendars_list = client.get_calendars()
 
         if not calendars_list:
@@ -151,7 +151,7 @@ def events(
         if not end_date:
             end_date = datetime.now() + timedelta(days=30)
 
-        client = OutlookClient(db_path=ctx.obj["db_path"])
+        client = create_client(db_path=ctx.obj["db_path"])
         events_list = client.get_calendar_events(
             calendar_id=calendar_id,
             start_date=start_date,
@@ -196,7 +196,7 @@ def search(
 ) -> None:
     """Search emails."""
     try:
-        client = OutlookClient(db_path=ctx.obj["db_path"])
+        client = create_client(db_path=ctx.obj["db_path"])
         results = client.search_emails(
             query=query,
             sender=sender,
@@ -222,7 +222,7 @@ def search(
 def info(ctx: click.Context) -> None:
     """Show information about the Outlook database."""
     try:
-        client = OutlookClient(db_path=ctx.obj["db_path"])
+        client = create_client(db_path=ctx.obj["db_path"])
         db_info = client.get_database_info()
 
         click.echo("Outlook Database Information:")

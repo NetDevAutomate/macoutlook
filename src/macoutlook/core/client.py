@@ -1,59 +1,25 @@
 """Main client class for macoutlook library.
 
-Coordinates database access, content parsing, and data model creation.
+Orchestrates database connections, repository delegation, and enrichment.
+Domain-specific query logic lives in EmailRepository and CalendarRepository.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from ..models.calendar import Calendar, CalendarEvent
 from ..models.email_message import EmailMessage
-from ..models.enums import ContentSource, FlagStatus, Priority
-from ..parsers.content import ContentParser
+from ..models.enums import ContentSource
 from ..parsers.icalendar import ICalendarParser
+from .calendar_repository import CalendarRepository
 from .database import OutlookDatabase
+from .email_repository import EmailRepository
 from .enricher import EmailEnricher
 from .message_source import MessageSourceReader
+from .protocols import DatabaseProtocol, EnricherProtocol
 
 logger = logging.getLogger(__name__)
-
-# Apple Core Foundation epoch starts from 2001-01-01
-CF_EPOCH = datetime(2001, 1, 1)
-
-
-def cf_timestamp_to_datetime(cf_timestamp: float) -> datetime:
-    """Convert Core Foundation timestamp to datetime."""
-    if not cf_timestamp or cf_timestamp <= 0:
-        return datetime.fromtimestamp(0)
-    return CF_EPOCH + timedelta(seconds=cf_timestamp)
-
-
-def datetime_to_cf_timestamp(dt: datetime) -> float:
-    """Convert datetime to Core Foundation timestamp."""
-    return (dt - CF_EPOCH).total_seconds()
-
-
-# SQL query for email retrieval with all needed columns
-_EMAIL_QUERY_COLUMNS = """
-    Record_RecordID,
-    Message_MessageID,
-    Message_NormalizedSubject,
-    Message_SenderAddressList,
-    Message_SenderList,
-    Message_ToRecipientAddressList,
-    Message_CCRecipientAddressList,
-    Message_TimeReceived,
-    Message_TimeSent,
-    Message_Preview,
-    Message_ReadFlag,
-    Message_IsOutgoingMessage,
-    Record_FlagStatus,
-    Record_Priority,
-    Record_FolderID,
-    Message_HasAttachment,
-    Message_Size
-"""
 
 
 class OutlookClient:
@@ -61,21 +27,30 @@ class OutlookClient:
 
     Accepts dependencies via constructor for testability and composability.
     Use create_client() for the common case.
+
+    This class is a thin orchestrator: it manages database connection
+    lifecycle and delegates query logic to EmailRepository and
+    CalendarRepository.
     """
 
     def __init__(
         self,
-        database: OutlookDatabase | None = None,
-        enricher: EmailEnricher | None = None,
-        content_parser: ContentParser | None = None,
-        ics_parser: ICalendarParser | None = None,
+        database: DatabaseProtocol | None = None,
+        enricher: EnricherProtocol | None = None,
         db_path: Path | str | None = None,
+        ics_parser: ICalendarParser | None = None,
     ) -> None:
-        self.db = database or OutlookDatabase(db_path)
+        self.db: DatabaseProtocol = database or OutlookDatabase(db_path)
         self.enricher = enricher
-        self.parser = content_parser or ContentParser()
-        self.ics_parser = ics_parser
         self._connected = False
+
+        # Build repositories using the shared database handle
+        self._email_repo = EmailRepository(self.db)
+        self._calendar_repo = CalendarRepository(self.db, ics_parser)
+
+    # ------------------------------------------------------------------
+    # Connection lifecycle
+    # ------------------------------------------------------------------
 
     def connect(self) -> None:
         """Connect to the Outlook database."""
@@ -88,6 +63,19 @@ class OutlookClient:
         if self._connected:
             self.db.disconnect()
             self._connected = False
+
+    def __enter__(self) -> "OutlookClient":
+        self.connect()
+        return self
+
+    def __exit__(
+        self, exc_type: type | None, exc_val: Exception | None, exc_tb: object
+    ) -> None:
+        self.disconnect()
+
+    # ------------------------------------------------------------------
+    # Email operations (delegated to EmailRepository)
+    # ------------------------------------------------------------------
 
     def get_emails(
         self,
@@ -109,34 +97,7 @@ class OutlookClient:
             List of EmailMessage objects.
         """
         self.connect()
-
-        query_parts = [f"SELECT {_EMAIL_QUERY_COLUMNS} FROM Mail WHERE 1=1"]  # noqa: S608  # nosec B608
-        params: list[object] = []
-
-        if start_date:
-            query_parts.append("AND Message_TimeReceived >= ?")
-            params.append(start_date.timestamp())
-
-        if end_date:
-            query_parts.append("AND Message_TimeReceived <= ?")
-            params.append(end_date.timestamp())
-
-        query_parts.append("ORDER BY Message_TimeReceived DESC LIMIT ?")
-        params.append(limit)
-
-        query = " ".join(query_parts)
-        rows = self.db.execute_query(query, tuple(params))
-
-        emails = []
-        for row in rows:
-            try:
-                email = self._row_to_email(row)
-                emails.append(email)
-            except (ValueError, KeyError) as e:
-                logger.warning("Failed to parse email row: %s", e)
-                continue
-
-        logger.info("Retrieved %d emails", len(emails))
+        emails = self._email_repo.get_emails(start_date, end_date, limit)
 
         if enrich and self.enricher is not None:
             emails = self.enrich_emails(emails)
@@ -165,110 +126,26 @@ class OutlookClient:
                 Finds "Andy Taylor" when DB has "Andrew Taylor".
         """
         self.connect()
+        return self._email_repo.search_emails(
+            query=query,
+            sender=sender,
+            subject=subject,
+            is_read=is_read,
+            start_date=start_date,
+            end_date=end_date,
+            fuzzy=fuzzy,
+            limit=limit,
+            offset=offset,
+        )
 
-        query_parts = [f"SELECT {_EMAIL_QUERY_COLUMNS} FROM Mail WHERE 1=1"]  # noqa: S608  # nosec B608
-        params: list[object] = []
-
-        if query:
-            query_parts.append(
-                "AND (Message_NormalizedSubject LIKE ? OR Message_Preview LIKE ?)"
-            )
-            term = f"%{query}%"
-            params.extend([term, term])
-
-        if sender:
-            if fuzzy:
-                # Pre-filter: SQL LIKE on first token to reduce candidate set
-                tokens = sender.split()
-                for token in tokens[:2]:
-                    query_parts.append(
-                        "AND (Message_SenderAddressList LIKE ? OR Message_SenderList LIKE ?)"
-                    )
-                    params.extend([f"%{token}%", f"%{token}%"])
-            else:
-                query_parts.append("AND Message_SenderAddressList LIKE ?")
-                params.append(f"%{sender}%")
-
-        if subject:
-            query_parts.append("AND Message_NormalizedSubject LIKE ?")
-            params.append(f"%{subject}%")
-
-        if is_read is not None:
-            query_parts.append("AND Message_ReadFlag = ?")
-            params.append(1 if is_read else 0)
-
-        if start_date:
-            query_parts.append("AND Message_TimeReceived >= ?")
-            params.append(start_date.timestamp())
-
-        if end_date:
-            query_parts.append("AND Message_TimeReceived <= ?")
-            params.append(end_date.timestamp())
-
-        query_parts.append("ORDER BY Message_TimeReceived DESC LIMIT ? OFFSET ?")
-        params.extend([limit, offset])
-
-        sql = " ".join(query_parts)
-        rows = self.db.execute_query(sql, tuple(params))
-
-        emails = []
-        for row in rows:
-            try:
-                email = self._row_to_email(row)
-                emails.append(email)
-            except (ValueError, KeyError) as e:
-                logger.warning("Failed to parse email row: %s", e)
-                continue
-
-        # Apply fuzzy matching post-filter on sender
-        if fuzzy and sender:
-            from ..search import FuzzyMatcher
-
-            matcher = FuzzyMatcher()
-            emails = [
-                e
-                for e in emails
-                if matcher.is_match(sender, e.sender_name or "")
-                or matcher.is_match(sender, e.sender)
-            ]
-
-        logger.info("Search returned %d emails", len(emails))
-        return emails
+    # ------------------------------------------------------------------
+    # Calendar operations (delegated to CalendarRepository)
+    # ------------------------------------------------------------------
 
     def get_calendars(self) -> list[Calendar]:
         """Get list of all available calendars."""
-        if self.ics_parser:
-            calendar_data = self.ics_parser.get_calendars()
-            return [
-                Calendar(
-                    calendar_id=d["calendar_id"],
-                    name=d["name"],
-                    color=d.get("color"),
-                    is_default=d.get("is_default", False),
-                    is_shared=d.get("is_shared", False),
-                    owner=d.get("owner"),
-                )
-                for d in calendar_data
-            ]
-
         self.connect()
-
-        query = """
-            SELECT DISTINCT
-                Record_FolderID as calendar_id,
-                'Calendar' as name
-            FROM CalendarEvents
-            ORDER BY Record_FolderID
-        """
-        rows = self.db.execute_query(query)
-
-        return [
-            Calendar(
-                calendar_id=str(row["calendar_id"] or ""),
-                name=row["name"] or "Calendar",
-            )
-            for row in rows
-        ]
+        return self._calendar_repo.get_calendars()
 
     def get_calendar_events(
         self,
@@ -278,91 +155,17 @@ class OutlookClient:
         limit: int = 1000,
     ) -> list[CalendarEvent]:
         """Get calendar events with optional filtering."""
-        if self.ics_parser:
-            events = self.ics_parser.get_all_events(
-                start_date=start_date,
-                end_date=end_date,
-                calendar_id=calendar_id,
-            )
-            return events[:limit] if len(events) > limit else events
-
         self.connect()
+        return self._calendar_repo.get_calendar_events(
+            calendar_id=calendar_id,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+        )
 
-        query_parts = [
-            """
-            SELECT
-                Record_RecordID as event_id,
-                Record_FolderID as calendar_id,
-                Calendar_UID as title,
-                Calendar_StartDateUTC as start_time,
-                Calendar_EndDateUTC as end_time,
-                Calendar_IsRecurring as is_recurring,
-                Record_ModDate as modified_time
-            FROM CalendarEvents
-            WHERE 1=1
-        """
-        ]
-        params: list[object] = []
-
-        if calendar_id:
-            query_parts.append("AND Record_FolderID = ?")
-            params.append(calendar_id)
-
-        if start_date:
-            query_parts.append("AND Calendar_StartDateUTC >= ?")
-            params.append(datetime_to_cf_timestamp(start_date))
-
-        if end_date:
-            query_parts.append("AND Calendar_EndDateUTC <= ?")
-            params.append(datetime_to_cf_timestamp(end_date))
-
-        query_parts.append("ORDER BY Calendar_StartDateUTC ASC LIMIT ?")
-        params.append(limit)
-
-        query = " ".join(query_parts)
-        rows = self.db.execute_query(query, tuple(params))
-
-        events = []
-        for row in rows:
-            try:
-                event = CalendarEvent(
-                    event_id=str(row["event_id"] or ""),
-                    calendar_id=str(row["calendar_id"] or ""),
-                    title=row["title"] or "Calendar Event",
-                    start_time=cf_timestamp_to_datetime(row["start_time"] or 0),
-                    end_time=cf_timestamp_to_datetime(row["end_time"] or 0),
-                    is_recurring=bool(row["is_recurring"]),
-                    modified_time=cf_timestamp_to_datetime(row["modified_time"])
-                    if row["modified_time"]
-                    else None,
-                )
-                events.append(event)
-            except (ValueError, KeyError) as e:
-                logger.warning("Failed to parse event row: %s", e)
-                continue
-
-        logger.info("Retrieved %d calendar events", len(events))
-        return events
-
-    def get_database_info(self) -> dict[str, object]:
-        """Get information about the connected database."""
-        self.connect()
-
-        tables = self.db.get_table_names()
-        info: dict[str, object] = {
-            "db_path": str(self.db.db_path),
-            "tables": tables,
-            "table_count": len(tables),
-        }
-
-        for table in ["Mail", "CalendarEvents", "Contacts"]:
-            if table in tables:
-                try:
-                    info[f"{table.lower()}_count"] = self.db.get_row_count(table)
-                except Exception:
-                    logger.debug("Could not get row count for %s", table)
-
-        return info
+    # ------------------------------------------------------------------
+    # Enrichment (cross-cutting orchestration, stays in client)
+    # ------------------------------------------------------------------
 
     def enrich_email(self, email: EmailMessage, markdown: bool = True) -> EmailMessage:
         """Enrich an email with full content from its .olk15MsgSource file.
@@ -441,61 +244,29 @@ class OutlookClient:
             dest_dir=Path(dest_dir),
         )
 
-    def _row_to_email(self, row: object) -> EmailMessage:
-        """Convert a database row to an EmailMessage."""
-        r = dict(row)  # type: ignore[call-overload]
+    # ------------------------------------------------------------------
+    # Database info (cross-cutting, stays in client)
+    # ------------------------------------------------------------------
 
-        # Parse recipients from semicolon-separated strings
-        recipients = _parse_delimited(r.get("Message_ToRecipientAddressList"))
-        cc_recipients = _parse_delimited(r.get("Message_CCRecipientAddressList"))
-
-        # Parse preview content
-        preview = str(r.get("Message_Preview") or "")
-
-        # Parse timestamp
-        raw_ts = r.get("Message_TimeReceived") or 0
-        timestamp = (
-            datetime.fromtimestamp(float(raw_ts))
-            if raw_ts
-            else datetime.fromtimestamp(0)
-        )
-
-        raw_sent = r.get("Message_TimeSent")
-        time_sent = datetime.fromtimestamp(float(raw_sent)) if raw_sent else None
-
-        return EmailMessage(
-            message_id=str(r.get("Message_MessageID") or ""),
-            record_id=int(r.get("Record_RecordID") or 0),
-            subject=str(r.get("Message_NormalizedSubject") or ""),
-            sender=str(r.get("Message_SenderAddressList") or ""),
-            sender_name=str(r.get("Message_SenderList") or "") or None,
-            recipients=recipients,
-            cc_recipients=cc_recipients,
-            timestamp=timestamp,
-            time_sent=time_sent,
-            size=r.get("Message_Size"),
-            is_read=bool(r.get("Message_ReadFlag")),
-            is_outgoing=bool(r.get("Message_IsOutgoingMessage")),
-            flag_status=FlagStatus(r.get("Record_FlagStatus") or 0)
-            if r.get("Record_FlagStatus") in (0, 1, 2)
-            else FlagStatus.NOT_FLAGGED,
-            priority=Priority(r.get("Record_Priority") or 3)
-            if r.get("Record_Priority") in (1, 3, 5)
-            else Priority.NORMAL,
-            folder_id=r.get("Record_FolderID"),
-            has_attachments=bool(r.get("Message_HasAttachment")),
-            preview=preview,
-            content_source=ContentSource.PREVIEW_ONLY,
-        )
-
-    def __enter__(self) -> "OutlookClient":
+    def get_database_info(self) -> dict[str, object]:
+        """Get information about the connected database."""
         self.connect()
-        return self
 
-    def __exit__(
-        self, exc_type: type | None, exc_val: Exception | None, exc_tb: object
-    ) -> None:
-        self.disconnect()
+        tables = self.db.get_table_names()
+        info: dict[str, object] = {
+            "db_path": str(self.db.db_path),
+            "tables": tables,
+            "table_count": len(tables),
+        }
+
+        for table in ["Mail", "CalendarEvents", "Contacts"]:
+            if table in tables:
+                try:
+                    info[f"{table.lower()}_count"] = self.db.get_row_count(table)
+                except Exception:
+                    logger.debug("Could not get row count for %s", table)
+
+        return info
 
 
 def create_client(
@@ -515,10 +286,3 @@ def create_client(
         enricher = EmailEnricher(reader)
 
     return OutlookClient(db_path=db_path, enricher=enricher)
-
-
-def _parse_delimited(value: str | None) -> list[str]:
-    """Parse a semicolon/comma-delimited string into trimmed, non-empty strings."""
-    if not value:
-        return []
-    return [item.strip() for item in value.replace(";", ",").split(",") if item.strip()]
