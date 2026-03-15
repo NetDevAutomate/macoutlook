@@ -65,6 +65,20 @@ END:VEVENT
 END:VCALENDAR
 """
 
+_ALL_DAY_ICS = """\
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Test//Test//EN
+BEGIN:VEVENT
+UID:allday-001@example.com
+SUMMARY:Company Holiday
+DTSTART;VALUE=DATE:20250615
+DTEND;VALUE=DATE:20250616
+DESCRIPTION:All-day company holiday
+END:VEVENT
+END:VCALENDAR
+"""
+
 _MISSING_TIMES_ICS = """\
 BEGIN:VCALENDAR
 VERSION:2.0
@@ -183,6 +197,28 @@ class TestParseIcsFile:
 
         assert len(events) == 1
         assert events[0].is_recurring is True
+
+    def test_all_day_event_detected(self, tmp_path: Path):
+        """All-day events use VALUE=DATE (pure date, no time component)."""
+        ics_file = _write_ics(tmp_path / "allday.ics", _ALL_DAY_ICS)
+
+        parser = ICalendarParser()
+        events = parser.parse_ics_file(str(ics_file))
+
+        assert len(events) == 1
+        event = events[0]
+        assert event.is_all_day is True
+        assert event.title == "Company Holiday"
+
+    def test_timed_event_not_all_day(self, tmp_path: Path):
+        """Events with DTSTART containing a time component are NOT all-day."""
+        ics_file = _write_ics(tmp_path / "timed.ics", _SIMPLE_ICS)
+
+        parser = ICalendarParser()
+        events = parser.parse_ics_file(str(ics_file))
+
+        assert len(events) == 1
+        assert events[0].is_all_day is False
 
     def test_parse_event_missing_times(self, tmp_path: Path):
         ics_file = _write_ics(tmp_path / "broken.ics", _MISSING_TIMES_ICS)

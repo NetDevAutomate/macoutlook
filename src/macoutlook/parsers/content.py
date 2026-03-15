@@ -37,8 +37,15 @@ class ContentParser:
             if not html_content:
                 html_content = raw_content
 
-            cleaned_html = self._clean_html(html_content)
-            text_content = self._html_to_text(cleaned_html)
+            # Parse HTML once, reuse the soup object for cleaning and text extraction
+            soup = BeautifulSoup(html_content, self.soup_parser)
+            self._clean_soup(soup)
+
+            # Extract text directly from the already-parsed soup (avoids re-parsing)
+            text_content = self._text_from_soup(soup)
+
+            # Serialize to string only for HTML output and markdown conversion
+            cleaned_html = self._serialize_soup(soup)
             markdown_content = self._html_to_markdown(cleaned_html)
 
             return {
@@ -76,40 +83,70 @@ class ContentParser:
             return content
 
     def _clean_html(self, html_content: str) -> str:
-        """Clean and normalize HTML content."""
+        """Clean and normalize HTML content.
+
+        Convenience wrapper that parses, cleans, and serializes in one call.
+        Prefer _clean_soup() + _serialize_soup() when you already have a soup object.
+        """
         try:
             soup = BeautifulSoup(html_content, self.soup_parser)
-
-            for element in soup(["script", "style"]):
-                element.decompose()
-
-            outlook_selectors = [
-                "[class*='MsoNormal']",
-                "[class*='WordSection']",
-                "o:p",
-            ]
-
-            for selector in outlook_selectors:
-                try:
-                    for element in soup.select(selector):
-                        element.unwrap()
-                except Exception:  # noqa: S112  # nosec B112
-                    continue
-
-            for tag in soup.find_all(["p", "div"]):
-                if not tag.get_text(strip=True):
-                    tag.decompose()
-
-            cleaned = str(soup)
-            cleaned = self._clean_whitespace(cleaned)
-            return cleaned
+            self._clean_soup(soup)
+            return self._serialize_soup(soup)
 
         except Exception as e:
             logger.warning("Failed to clean HTML: %s", e)
             return html_content
 
+    def _clean_soup(self, soup: BeautifulSoup) -> None:
+        """Clean and normalize a BeautifulSoup object in place.
+
+        Removes scripts, styles, empty tags, and unwraps Outlook-specific markup.
+        Modifies the soup object directly rather than returning a new one.
+        """
+        for element in soup(["script", "style"]):
+            element.decompose()
+
+        outlook_selectors = [
+            "[class*='MsoNormal']",
+            "[class*='WordSection']",
+            "o:p",
+        ]
+
+        for selector in outlook_selectors:
+            try:
+                for element in soup.select(selector):
+                    element.unwrap()
+            except Exception:  # noqa: S112  # nosec B112
+                continue
+
+        for tag in soup.find_all(["p", "div"]):
+            if not tag.get_text(strip=True):
+                tag.decompose()
+
+    def _serialize_soup(self, soup: BeautifulSoup) -> str:
+        """Serialize a BeautifulSoup object to a cleaned HTML string."""
+        cleaned = str(soup)
+        cleaned = self._clean_whitespace(cleaned)
+        return cleaned
+
+    def _text_from_soup(self, soup: BeautifulSoup) -> str:
+        """Extract clean plain text from an already-parsed BeautifulSoup object."""
+        try:
+            text = soup.get_text()
+            text = self._clean_whitespace(text)
+            text = html.unescape(text)
+            return text.strip()
+
+        except Exception as e:
+            logger.warning("Failed to extract text from soup: %s", e)
+            return self._strip_html_tags(str(soup))
+
     def _html_to_text(self, html_content: str) -> str:
-        """Convert HTML to clean plain text."""
+        """Convert HTML to clean plain text.
+
+        Convenience wrapper that parses and extracts text in one call.
+        Prefer _text_from_soup() when you already have a soup object.
+        """
         try:
             soup = BeautifulSoup(html_content, self.soup_parser)
             text = soup.get_text()

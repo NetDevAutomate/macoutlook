@@ -134,12 +134,23 @@ class EmailEnricher:
         if source_path is None:
             raise FileNotFoundError(f"No source file for Message-ID: {message_id}")
 
-        # Re-parse the full MIME message to get attachment content
+        # Re-parse the full MIME message to get attachment content.
+        # .olk15MsgSource files have a binary preamble before MIME headers
+        # and use bare CR line endings — must handle both before parsing.
         from email import policy as _policy
         from email.parser import BytesParser
 
         with open(source_path, "rb") as f:
-            msg = BytesParser(policy=_policy.default).parse(f)
+            raw = f.read()
+
+        mime_start = MessageSourceReader._find_mime_start(raw)
+        mime_bytes = raw[mime_start:]
+
+        # Normalize bare CR line endings to CRLF (same as _parse_mime_file)
+        if b"\r\n" not in mime_bytes[:500] and b"\r" in mime_bytes[:500]:
+            mime_bytes = mime_bytes.replace(b"\r", b"\r\n")
+
+        msg = BytesParser(policy=_policy.default).parsebytes(mime_bytes)
 
         # Find the matching attachment
         safe_target = Path(attachment_filename).name

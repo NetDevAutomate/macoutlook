@@ -1,7 +1,7 @@
 """iCalendar (.ics) file parser for modern Outlook calendar data."""
 
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -120,7 +120,9 @@ class ICalendarParser:
                 return None
 
             # Extract additional properties
-            is_all_day = hasattr(dtstart.dt, "date") and not hasattr(dtstart.dt, "hour")
+            is_all_day = isinstance(dtstart.dt, date) and not isinstance(
+                dtstart.dt, datetime
+            )
             is_recurring = bool(vevent.get("RRULE"))
 
             # Extract organizer
